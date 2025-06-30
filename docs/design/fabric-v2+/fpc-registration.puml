@@ -193,7 +193,7 @@ return Credentials
 end
 
 group Attestation-to-Evidence Conversion
-  Peer_CLI -> Peer_CLI +: AttestationToEvidence(Credentials.Attestation)
+  Peer_CLI -> Peer_CLI ++: AttestationToEvidence(Credentials.Attestation)
   Peer_CLI -> IAS ++: send Credentials.Attestation for verification
   note left IAS
     IAS verifies the quote produced by the enclave and returns
@@ -249,7 +249,7 @@ end
 
   group check consistency of Credentials
     create Lifecycle order 55
-    ERCC1 -> Lifecycle +: queryChaincodeDefinition (Credentials.AttestedData.CC_Params.CC_Id)
+    ERCC1 -> Lifecycle ++: queryChaincodeDefinition (Credentials.AttestedData.CC_Params.CC_Id)
     return chaincode definition
 
     ERCC1 -> ERCC1    : check Credentials.AttestedData.CC_Params against chaincode definition
