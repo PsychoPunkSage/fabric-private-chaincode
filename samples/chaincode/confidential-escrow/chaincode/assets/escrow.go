@@ -38,13 +38,13 @@ var Escrow = assets.AssetType{
 		{
 			Tag:      "assetType",
 			Label:    "Asset Type Reference",
-			DataType: "string", // References digitalAsset symbol
+			DataType: "->digitalAsset", // References digitalAsset symbol
 			Required: true,
 		},
 		{
-			Tag:      "conditionType",
-			Label:    "Condition Type",
-			DataType: "string", // "hashlock", "signature", "timelock"
+			Tag:      "conditionValue",
+			Label:    "Condition Value",
+			DataType: "string",
 			Required: true,
 		},
 		{

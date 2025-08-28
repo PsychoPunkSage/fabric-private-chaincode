@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/hyperledger-labs/cc-tools/accesscontrol"
@@ -17,14 +18,13 @@ var CreateWallet = transactions.Transaction{
 	Description: "Creates a new Wallet",
 	Method:      "POST",
 	Callers: []accesscontrol.Caller{
-		{MSP: "*"},
-		// {
-		// 	MSP: "org1MSP",
-		// 	// OU:  "client",
-		// }, {
-		// 	MSP: "org2MSP",
-		// 	// OU:  "client",
-		// },
+		{
+			MSP: "Org1MSP",
+			OU:  "admin",
+		}, {
+			MSP: "Org2MSP",
+			OU:  "admin",
+		},
 	},
 
 	Args: []transactions.Argument{
@@ -49,15 +49,15 @@ var CreateWallet = transactions.Transaction{
 			Required:    true, // testing purpose
 		},
 		{
-			Tag:      "balance",
-			Label:    "Token Balance",
-			DataType: "number",
+			Tag:      "balances",
+			Label:    "Different Token Balance",
+			DataType: "[]number",
 			Required: true,
 		},
 		{
-			Tag:      "digitalAssetType",
-			Label:    "Digital Asset in Holding",
-			DataType: "string",
+			Tag:      "digitalAssetTypes",
+			Label:    "Digital Assets in Holding",
+			DataType: "[]->digitalAsset",
 			Required: true,
 		},
 	},
@@ -66,16 +66,35 @@ var CreateWallet = transactions.Transaction{
 		walletId, _ := req["walletId"].(string)
 		ownerId, _ := req["ownerId"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
-		balance, _ := req["balance"].(float64)
-		assetType, _ := req["digitalAssetType"].(string)
+		balances, _ := req["balances"].([]interface{})
+		assetTypes, _ := req["digitalAssetTypes"].([]interface{})
+
+		fmt.Printf("DEBUG: Received assetTypes: %+v\n", assetTypes)
+		fmt.Printf("DEBUG: Type of first element: %T\n", assetTypes[0])
+
+		var processedAssetTypes []interface{}
+		for _, assetType := range assetTypes {
+			switch v := assetType.(type) {
+			case string:
+				// If it's a string (UUID), convert to proper reference format
+				processedAssetTypes = append(processedAssetTypes, map[string]interface{}{
+					"@key": "digitalAsset:" + v,
+				})
+			case map[string]interface{}:
+				// If it's already a map (proper reference), use as-is
+				processedAssetTypes = append(processedAssetTypes, v)
+			default:
+				processedAssetTypes = append(processedAssetTypes, v)
+			}
+		}
 
 		walletMap := make(map[string]interface{})
 		walletMap["@assetType"] = "wallet"
 		walletMap["walletId"] = walletId
 		walletMap["ownerId"] = ownerId
 		walletMap["ownerCertHash"] = ownerCertHash
-		walletMap["balance"] = balance
-		walletMap["digitalAssetType"] = assetType
+		walletMap["balances"] = balances
+		walletMap["digitalAssetTypes"] = processedAssetTypes
 		walletMap["createdAt"] = time.Now()
 
 		walletAsset, err := assets.NewAsset(walletMap)
@@ -103,32 +122,30 @@ var ReadWallet = transactions.Transaction{
 	Description: "Read a Wallet by its walletId",
 	Method:      "GET",
 	Callers: []accesscontrol.Caller{
-		{MSP: "*"},
-		// {
-		// 	MSP: "org1MSP",
-		// 	// OU:  "client",
-		// }, {
-		// 	MSP: "org2MSP",
-		// 	// OU:  "client",
-		// },
+		{
+			MSP: "Org1MSP",
+			OU:  "admin",
+		}, {
+			MSP: "Org2MSP",
+			OU:  "admin",
+		},
 	},
 
 	Args: []transactions.Argument{
 		{
-			Tag:         "walletId",
-			Label:       "Wallet ID",
-			Description: "ID of the Wallet to read",
+			Tag:         "uuid",
+			Label:       "UUID",
+			Description: "UUID of the Digital Asset to read",
 			DataType:    "string",
 			Required:    true,
 		},
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		walletId, _ := req["walletId"].(string)
+		uuid, _ := req["uuid"].(string)
 
 		key := assets.Key{
-			"@assetType": "wallet",
-			"walletId":   walletId,
+			"@key": "wallet:" + uuid,
 		}
 
 		asset, err := key.Get(stub)
