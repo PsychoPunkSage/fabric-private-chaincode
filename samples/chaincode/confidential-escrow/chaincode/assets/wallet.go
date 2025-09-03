@@ -34,13 +34,19 @@ var Wallet = assets.AssetType{
 			Tag:      "balances",
 			Label:    "Token Balance",
 			DataType: "[]number",
-			Required: true,
+			Required: false,
+		},
+		{
+			Tag:      "escrowBalances",
+			Label:    "Escrowed Token Balances",
+			DataType: "[]number",
+			Required: false, // Initialize as empty for existing wallets
 		},
 		{
 			Tag:      "digitalAssetTypes",
 			Label:    "Asset Type Reference",
 			DataType: "[]->digitalAsset", // References digitalAsset
-			Required: true,
+			Required: false,
 		},
 		{
 			Tag:      "createdAt",
