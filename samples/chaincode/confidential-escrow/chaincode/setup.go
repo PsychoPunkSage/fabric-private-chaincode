@@ -26,10 +26,16 @@ var (
 		transaction.ReadEscrow,
 		// misc
 		transaction.GetBalance,
+		transaction.GetEscrowBalance,
 		transaction.GetWalletByOwner,
 		transaction.MintTokens,
 		transaction.TransferTokens,
 		transaction.BurnTokens,
+		// Escrow
+		transaction.LockFundsInEscrow,
+		transaction.RefundEscrow,
+		transaction.VerifyEscrowCondition,
+		transaction.ReleaseEscrow,
 	}
 	AssetTypeList = []assets.AssetType{
 		asset.Wallet,
