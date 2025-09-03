@@ -243,6 +243,7 @@ var MintTokens = transactions.Transaction{
 
 		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]interface{})
 		balances := walletAsset.GetProp("balances").([]interface{})
+		escrowBalances := walletAsset.GetProp("escrowBalances").([]interface{})
 
 		// Find asset index and update balance
 		assetFound := false
@@ -263,9 +264,12 @@ var MintTokens = transactions.Transaction{
 			}
 		}
 
-		// PPS-fix: if asset not found... then add asset...
 		if !assetFound {
-			return nil, errors.NewCCError("Asset not found in wallet", 404)
+			digitalAssetTypes = append(digitalAssetTypes, map[string]interface{}{
+				"@key": "digitalAsset:" + assetId,
+			})
+			balances = append(balances, amount)
+			escrowBalances = append(escrowBalances, 0.0)
 		}
 
 		// Create updated wallet map
@@ -276,6 +280,7 @@ var MintTokens = transactions.Transaction{
 		walletMap["ownerId"] = walletAsset.GetProp("ownerId")
 		walletMap["ownerCertHash"] = walletAsset.GetProp("ownerCertHash")
 		walletMap["balances"] = balances
+		walletMap["escrowBalances"] = escrowBalances
 		walletMap["digitalAssetTypes"] = digitalAssetTypes
 		walletMap["createdAt"] = walletAsset.GetProp("createdAt")
 
@@ -412,6 +417,7 @@ var TransferTokens = transactions.Transaction{
 		// Update source wallet balance
 		fromAssetTypes := fromWalletAsset.GetProp("digitalAssetTypes").([]interface{})
 		fromBalances := fromWalletAsset.GetProp("balances").([]interface{})
+		fromEscrowBalances := fromWalletAsset.GetProp("escrowBalances").([]interface{})
 
 		fromAssetFound := false
 		for i, assetRef := range fromAssetTypes {
@@ -441,6 +447,7 @@ var TransferTokens = transactions.Transaction{
 		// Update destination wallet balance
 		toAssetTypes := toWalletAsset.GetProp("digitalAssetTypes").([]interface{})
 		toBalances := toWalletAsset.GetProp("balances").([]interface{})
+		toEscrowBalances := toWalletAsset.GetProp("escrowBalances").([]interface{})
 
 		toAssetFound := false
 		for i, assetRef := range toAssetTypes {
@@ -460,9 +467,13 @@ var TransferTokens = transactions.Transaction{
 			}
 		}
 
-		// PPS-fix: if asset not found, Add asset
+		// PPS: if asset not found, Add asset
 		if !toAssetFound {
-			return nil, errors.NewCCError("Asset not found in destination wallet", 404)
+			toAssetTypes = append(toAssetTypes, map[string]interface{}{
+				"@key": "digitalAsset:" + assetId,
+			})
+			toBalances = append(toBalances, amount)
+			toEscrowBalances = append(toEscrowBalances, 0.0)
 		}
 
 		// Save updated source wallet
@@ -473,6 +484,7 @@ var TransferTokens = transactions.Transaction{
 		fromWalletMap["ownerId"] = fromWalletAsset.GetProp("ownerId")
 		fromWalletMap["ownerCertHash"] = fromWalletAsset.GetProp("ownerCertHash")
 		fromWalletMap["balances"] = fromBalances
+		fromWalletMap["escrowBalances"] = fromEscrowBalances
 		fromWalletMap["digitalAssetTypes"] = fromAssetTypes
 		fromWalletMap["createdAt"] = fromWalletAsset.GetProp("createdAt")
 
@@ -494,6 +506,7 @@ var TransferTokens = transactions.Transaction{
 		toWalletMap["ownerId"] = toWalletAsset.GetProp("ownerId")
 		toWalletMap["ownerCertHash"] = toWalletAsset.GetProp("ownerCertHash")
 		toWalletMap["balances"] = toBalances
+		toWalletMap["escrowBalances"] = toEscrowBalances
 		toWalletMap["digitalAssetTypes"] = toAssetTypes
 		toWalletMap["createdAt"] = toWalletAsset.GetProp("createdAt")
 
@@ -632,6 +645,7 @@ var BurnTokens = transactions.Transaction{
 		walletMap["ownerId"] = walletAsset.GetProp("ownerId")
 		walletMap["ownerCertHash"] = walletAsset.GetProp("ownerCertHash")
 		walletMap["balances"] = balances
+		walletMap["escrowBalances"] = walletAsset.GetProp("escrowBalances")
 		walletMap["digitalAssetTypes"] = digitalAssetTypes
 		walletMap["createdAt"] = walletAsset.GetProp("createdAt")
 
