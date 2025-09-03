@@ -2,7 +2,6 @@ package transactions
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/hyperledger-labs/cc-tools/accesscontrol"
@@ -48,53 +47,54 @@ var CreateWallet = transactions.Transaction{
 			DataType:    "string",
 			Required:    true, // testing purpose
 		},
-		{
-			Tag:      "balances",
-			Label:    "Different Token Balance",
-			DataType: "[]number",
-			Required: true,
-		},
-		{
-			Tag:      "digitalAssetTypes",
-			Label:    "Digital Assets in Holding",
-			DataType: "[]->digitalAsset",
-			Required: true,
-		},
+		// {
+		// 	Tag:      "balances",
+		// 	Label:    "Different Token Balance",
+		// 	DataType: "[]number",
+		// 	Required: true,
+		// },
+		// {
+		// 	Tag:      "digitalAssetTypes",
+		// 	Label:    "Digital Assets in Holding",
+		// 	DataType: "[]->digitalAsset",
+		// 	Required: true,
+		// },
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		walletId, _ := req["walletId"].(string)
 		ownerId, _ := req["ownerId"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
-		balances, _ := req["balances"].([]interface{})
-		assetTypes, _ := req["digitalAssetTypes"].([]interface{})
+		// balances, _ := req["balances"].([]interface{})
+		// assetTypes, _ := req["digitalAssetTypes"].([]interface{})
 
-		fmt.Printf("DEBUG: Received assetTypes: %+v\n", assetTypes)
-		fmt.Printf("DEBUG: Type of first element: %T\n", assetTypes[0])
-
-		var processedAssetTypes []interface{}
-		for _, assetType := range assetTypes {
-			switch v := assetType.(type) {
-			case string:
-				// If it's a string (UUID), convert to proper reference format
-				processedAssetTypes = append(processedAssetTypes, map[string]interface{}{
-					"@key": "digitalAsset:" + v,
-				})
-			case map[string]interface{}:
-				// If it's already a map (proper reference), use as-is
-				processedAssetTypes = append(processedAssetTypes, v)
-			default:
-				processedAssetTypes = append(processedAssetTypes, v)
-			}
-		}
+		// fmt.Printf("DEBUG: Received assetTypes: %+v\n", assetTypes)
+		// fmt.Printf("DEBUG: Type of first element: %T\n", assetTypes[0])
+		//
+		// var processedAssetTypes []interface{}
+		// for _, assetType := range assetTypes {
+		// 	switch v := assetType.(type) {
+		// 	case string:
+		// 		// If it's a string (UUID), convert to proper reference format
+		// 		processedAssetTypes = append(processedAssetTypes, map[string]interface{}{
+		// 			"@key": "digitalAsset:" + v,
+		// 		})
+		// 	case map[string]interface{}:
+		// 		// If it's already a map (proper reference), use as-is
+		// 		processedAssetTypes = append(processedAssetTypes, v)
+		// 	default:
+		// 		processedAssetTypes = append(processedAssetTypes, v)
+		// 	}
+		// }
 
 		walletMap := make(map[string]interface{})
 		walletMap["@assetType"] = "wallet"
 		walletMap["walletId"] = walletId
 		walletMap["ownerId"] = ownerId
 		walletMap["ownerCertHash"] = ownerCertHash
-		walletMap["balances"] = balances
-		walletMap["digitalAssetTypes"] = processedAssetTypes
+		walletMap["escrowBalances"] = make([]interface{}, 0)
+		walletMap["balances"] = make([]interface{}, 0)
+		walletMap["digitalAssetTypes"] = make([]interface{}, 0)
 		walletMap["createdAt"] = time.Now()
 
 		walletAsset, err := assets.NewAsset(walletMap)
@@ -217,10 +217,84 @@ var GetBalance = transactions.Transaction{
 	},
 }
 
+var GetEscrowBalance = transactions.Transaction{
+	Tag:         "getEscrowBalance",
+	Label:       "Get Wallet Escrow Balance",
+	Description: "Get escrowed balance of a specific token in wallet",
+	Method:      "GET",
+	Callers: []accesscontrol.Caller{
+		{MSP: "Org1MSP", OU: "admin"},
+		{MSP: "Org2MSP", OU: "admin"},
+	},
+	Args: []transactions.Argument{
+		{Tag: "walletId", DataType: "string", Required: true},
+		{Tag: "assetSymbol", DataType: "string", Required: true},
+		{Tag: "ownerCertHash", DataType: "string", Required: true},
+	},
+	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+		walletId, _ := req["walletId"].(string)
+		assetSymbol, _ := req["assetSymbol"].(string)
+		ownerCertHash, _ := req["ownerCertHash"].(string)
+
+		// Get wallet
+		key := assets.Key{
+			"@key": "wallet:" + walletId,
+		}
+
+		walletAsset, err := key.Get(stub)
+		if err != nil {
+			return nil, errors.WrapErrorWithStatus(err, "Error reading wallet from blockchain", err.Status())
+		}
+
+		// Verify ownership
+		if walletAsset.GetProp("ownerCertHash").(string) != ownerCertHash {
+			return nil, errors.NewCCError("Unauthorized: Certificate hash mismatch", 403)
+		}
+
+		// Find asset index
+		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]interface{})
+		escrowBalances := walletAsset.GetProp("escrowBalances").([]interface{})
+
+		for i, assetRef := range digitalAssetTypes {
+			// Get the referenced asset
+			var assetKey string
+			switch ref := assetRef.(type) {
+			case map[string]interface{}:
+				assetKey = ref["@key"].(string)
+			case string:
+				assetKey = "digitalAsset:" + ref
+			}
+
+			// Read the asset to get its symbol
+			refKey := assets.Key{"@key": assetKey}
+			asset, assetErr := refKey.Get(stub)
+			if assetErr != nil {
+				continue
+			}
+
+			if asset.GetProp("symbol").(string) == assetSymbol {
+				escrowBalance := escrowBalances[i].(float64)
+				response := map[string]interface{}{
+					"walletId":      walletId,
+					"assetSymbol":   assetSymbol,
+					"escrowBalance": escrowBalance,
+				}
+				responseJSON, jsonErr := json.Marshal(response)
+				if jsonErr != nil {
+					return nil, errors.WrapError(nil, "failed to encode response to JSON format")
+				}
+				return responseJSON, nil
+			}
+		}
+
+		return nil, errors.NewCCError("Asset not found in wallet", 404)
+	},
+}
+
 var GetWalletByOwner = transactions.Transaction{
 	Tag:         "getWalletByOwner",
 	Label:       "Get Wallet By Owner",
-	Description: "Find wallet by owner identity",
+	Description: "Find wallet by providing wallet UUID directly",
 	Method:      "GET",
 	Callers: []accesscontrol.Caller{
 		{
@@ -235,9 +309,9 @@ var GetWalletByOwner = transactions.Transaction{
 
 	Args: []transactions.Argument{
 		{
-			Tag:         "ownerId",
-			Label:       "Owner Identity",
-			Description: "Identity of the wallet owner",
+			Tag:         "walletUuid",
+			Label:       "Wallet UUID",
+			Description: "UUID of the wallet to find",
 			DataType:    "string",
 			Required:    true,
 		},
@@ -251,30 +325,24 @@ var GetWalletByOwner = transactions.Transaction{
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		ownerId, _ := req["ownerId"].(string)
+		walletUuid, _ := req["walletUuid"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
 
-		// Search for wallet by owner
-		query := map[string]interface{}{
-			"selector": map[string]interface{}{
-				"@assetType":    "wallet",
-				"ownerId":       ownerId,
-				"ownerCertHash": ownerCertHash,
-			},
-		}
-
-		searchResponse, err := assets.Search(stub, query, "", true)
+		// Get wallet directly
+		walletKey := assets.Key{"@key": "wallet:" + walletUuid}
+		wallet, err := walletKey.Get(stub)
 		if err != nil {
-			return nil, errors.WrapErrorWithStatus(err, "Error searching for wallet", 500)
+			return nil, errors.WrapErrorWithStatus(err, "Wallet not found", 404)
 		}
 
-		if len(searchResponse.Result) == 0 {
-			return nil, errors.NewCCError("Wallet not found for owner", 404)
+		// Verify ownership
+		if wallet.GetProp("ownerCertHash").(string) != ownerCertHash {
+			return nil, errors.NewCCError("Unauthorized: Certificate hash mismatch", 403)
 		}
 
-		responseJSON, jsonErr := json.Marshal(searchResponse)
+		responseJSON, jsonErr := json.Marshal(wallet)
 		if jsonErr != nil {
-			return nil, errors.WrapErrorWithStatus(nil, "Error marshaling response", 500)
+			return nil, errors.WrapError(nil, "failed to encode wallet to JSON format")
 		}
 
 		return responseJSON, nil
@@ -301,7 +369,7 @@ var ReadWallet = transactions.Transaction{
 		{
 			Tag:         "uuid",
 			Label:       "UUID",
-			Description: "UUID of the Digital Asset to read",
+			Description: "UUID of the wallet to read",
 			DataType:    "string",
 			Required:    true,
 		},
