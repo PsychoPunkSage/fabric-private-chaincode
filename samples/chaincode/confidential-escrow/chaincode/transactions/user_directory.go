@@ -88,7 +88,7 @@ var CreateUserDir = transactions.Transaction{
 var ReadUserDir = transactions.Transaction{
 	Tag:         "readUserDir",
 	Label:       "Read User Directory",
-	Description: "Read a User Directory by its publicKeyHash",
+	Description: "Read a User Directory by its publicKeyHash with authentication",
 	Method:      "GET",
 	Callers: []accesscontrol.Caller{
 		{
@@ -104,7 +104,14 @@ var ReadUserDir = transactions.Transaction{
 		{
 			Tag:         "uuid",
 			Label:       "UUID",
-			Description: "UUID of the Digital Asset to read",
+			Description: "UUID of the User Directory to read",
+			DataType:    "string",
+			Required:    true,
+		},
+		{
+			Tag:         "certHash",
+			Label:       "Certificate Hash",
+			Description: "Certificate hash for ownership verification",
 			DataType:    "string",
 			Required:    true,
 		},
@@ -112,6 +119,7 @@ var ReadUserDir = transactions.Transaction{
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		uuid, _ := req["uuid"].(string)
+		certHash, _ := req["certHash"].(string)
 
 		key := assets.Key{
 			"@key": "userdir:" + uuid,
@@ -119,7 +127,13 @@ var ReadUserDir = transactions.Transaction{
 
 		asset, err := key.Get(stub)
 		if err != nil {
-			return nil, errors.WrapErrorWithStatus(err, "Error user directory entry from blockchain", err.Status())
+			return nil, errors.WrapErrorWithStatus(err, "Error reading user directory entry from blockchain", err.Status())
+		}
+
+		// Verify ownership - only the owner can read their own directory
+		storedCertHash := asset.GetProp("certHash").(string)
+		if storedCertHash != certHash {
+			return nil, errors.NewCCError("Unauthorized: Certificate hash mismatch", 403)
 		}
 
 		assetJSON, nerr := json.Marshal(asset)
