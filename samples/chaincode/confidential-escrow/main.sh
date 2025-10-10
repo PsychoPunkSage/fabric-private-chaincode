@@ -36,14 +36,21 @@ check_fpc_path() {
 
 # Source environment variables
 source_env() {
+    local env_file="${1:-}"
+
     # Get the directory where the script is located
     SCRIPT_DIR="$FPC_PATH/samples/chaincode/confidential-escrow/"
 
-    if [ -f "$SCRIPT_DIR/.env" ]; then
-        source "$SCRIPT_DIR/.env"
-        log_info "Environment variables loaded from .env"
+    # If no argument provided, use default .env
+    if [ -z "$env_file" ]; then
+        env_file="$SCRIPT_DIR/.env"
+    fi
+
+    if [ -f "$env_file" ]; then
+        source "$env_file"
+        log_info "Environment variables loaded from $(basename $env_file)"
     else
-        log_error ".env file not found. Make sure it exists in script directory: $SCRIPT_DIR"
+        log_error "Environment file not found: $env_file"
         exit 1
     fi
 }
@@ -114,8 +121,16 @@ start_ercc() {
 
 # Setup docker environment
 setup_docker() {
+    local env_file="${1:-}"
+
     log_info "=== SETTING UP DOCKER ENVIRONMENT ==="
-    source_env
+
+    # Source the appropriate environment file
+    if [ -n "$env_file" ]; then
+        source_env "$env_file"
+    else
+        source_env # Use default .env
+    fi
 
     cd $FPC_PATH/samples/deployment/test-network
     run_cmd "./update-connection.sh" "Updating connections"
@@ -187,6 +202,7 @@ test_create_wallet() {
     \"digitalAssetTypes\": [$DIGITAL_ASSET_JSON]
   }" 2>&1)
     echo "$output"
+    echo "DIGITIAL ASSET JSON:> $DIGITAL_ASSET_JSON"
     store_wallet_data "$output"
 }
 
@@ -201,6 +217,7 @@ test_create_wallet2() {
         \"digitalAssetTypes\": [$DIGITAL_ASSET_JSON]
     }" 2>&1)
     echo "$output"
+    echo "DIGITIAL ASSET JSON:> $DIGITAL_ASSET_JSON"
     WALLET2_UUID=$(echo "$output" | grep '^>' | sed 's/^> //' | grep -o '"@key":"wallet:[^"]*"' | cut -d':' -f3 | tr -d '"')
 }
 
@@ -502,4 +519,7 @@ main() {
     esac
 }
 
-main "$@"
+# Only run main if script is executed directly, not sourced
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi
