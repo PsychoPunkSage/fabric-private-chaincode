@@ -30,6 +30,18 @@ var Escrow = assets.AssetType{
 			Required: true,
 		},
 		{
+			Tag:      "buyerWalletUUID",
+			Label:    "Buyer Wallet UUID",
+			DataType: "string",
+			Required: true,
+		},
+		{
+			Tag:      "sellerWalletUUID",
+			Label:    "Seller Wallet UUID",
+			DataType: "string",
+			Required: true,
+		},
+		{
 			Tag:      "amount",
 			Label:    "Escrowed Amount",
 			DataType: "number",
@@ -39,6 +51,12 @@ var Escrow = assets.AssetType{
 			Tag:      "assetType",
 			Label:    "Asset Type Reference",
 			DataType: "->digitalAsset", // References digitalAsset symbol
+			Required: true,
+		},
+		{
+			Tag:      "parcelId",
+			Label:    "Parcel ID",
+			DataType: "string",
 			Required: true,
 		},
 		{
