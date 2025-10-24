@@ -19,8 +19,8 @@ var Wallet = assets.AssetType{
 			IsKey:    true, // primary key
 		},
 		{
-			Tag:      "ownerId",
-			Label:    "Owner Identity",
+			Tag:      "ownerPubKey",
+			Label:    "Owner Public Key",
 			DataType: "string",
 			Required: true,
 		},

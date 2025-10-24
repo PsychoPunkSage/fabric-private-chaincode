@@ -18,8 +18,8 @@ var UserDirectory = assets.AssetType{
 			IsKey:    true,
 		},
 		{
-			Tag:      "walletId",
-			Label:    "Associated Wallet ID",
+			Tag:      "walletUUID",
+			Label:    "Associated Wallet UUID",
 			DataType: "string",
 			Required: true,
 		},
