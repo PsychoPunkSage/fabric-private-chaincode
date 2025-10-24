@@ -18,7 +18,7 @@ var (
 		transaction.CreateUserDir,
 		transaction.CreateWallet,
 		transaction.CreateDigitalAsset,
-		transaction.CreateEscrow,
+		transaction.CreateAndLockEscrow,
 		// Read
 		transaction.ReadUserDir,
 		transaction.ReadWallet,
@@ -32,7 +32,6 @@ var (
 		transaction.TransferTokens,
 		transaction.BurnTokens,
 		// Escrow
-		transaction.LockFundsInEscrow,
 		transaction.RefundEscrow,
 		transaction.VerifyEscrowCondition,
 		transaction.ReleaseEscrow,
