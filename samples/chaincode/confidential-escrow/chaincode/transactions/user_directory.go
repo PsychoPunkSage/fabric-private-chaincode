@@ -35,8 +35,8 @@ var CreateUserDir = transactions.Transaction{
 			Required: true,
 		},
 		{
-			Tag:      "walletId",
-			Label:    "Associated Wallet ID",
+			Tag:      "walletUUID",
+			Label:    "Associated Wallet UUID",
 			DataType: "string",
 			Required: true,
 		},
@@ -50,13 +50,13 @@ var CreateUserDir = transactions.Transaction{
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		publicKeyHash, _ := req["publicKeyHash"].(string)
-		walletId, _ := req["walletId"].(string)
+		walletId, _ := req["walletUUID"].(string)
 		certHash, _ := req["certHash"].(string)
 
 		userDirMap := make(map[string]interface{})
 		userDirMap["@assetType"] = "userdir"
 		userDirMap["publicKeyHash"] = publicKeyHash
-		userDirMap["walletId"] = walletId
+		userDirMap["walletUUID"] = walletId
 		userDirMap["certHash"] = certHash
 
 		userDirAsset, err := assets.NewAsset(userDirMap)
@@ -88,24 +88,19 @@ var CreateUserDir = transactions.Transaction{
 var ReadUserDir = transactions.Transaction{
 	Tag:         "readUserDir",
 	Label:       "Read User Directory",
-	Description: "Read a User Directory by its publicKeyHash with authentication",
+	Description: "Read a User Directory by its publicKeyHash",
 	Method:      "GET",
 	Callers: []accesscontrol.Caller{
-		{
-			MSP: "Org1MSP",
-			OU:  "admin",
-		}, {
-			MSP: "Org2MSP",
-			OU:  "admin",
-		},
+		{MSP: "Org1MSP", OU: "admin"},
+		{MSP: "Org2MSP", OU: "admin"},
 	},
 
 	Args: []transactions.Argument{
 		{
-			Tag:         "uuid",
-			Label:       "UUID",
-			Description: "UUID of the User Directory to read",
-			DataType:    "string",
+			Tag:         "userDir",
+			Label:       "User Directory",
+			Description: "User Directory to read",
+			DataType:    "->userdir",
 			Required:    true,
 		},
 		{
@@ -118,19 +113,15 @@ var ReadUserDir = transactions.Transaction{
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		uuid, _ := req["uuid"].(string)
+		userDirRef, _ := req["userDir"].(assets.Key)
 		certHash, _ := req["certHash"].(string)
 
-		key := assets.Key{
-			"@key": "userdir:" + uuid,
-		}
-
-		asset, err := key.Get(stub)
+		asset, err := userDirRef.Get(stub)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error reading user directory entry from blockchain", err.Status())
 		}
 
-		// Verify ownership - only the owner can read their own directory
+		// Verify ownership
 		storedCertHash := asset.GetProp("certHash").(string)
 		if storedCertHash != certHash {
 			return nil, errors.NewCCError("Unauthorized: Certificate hash mismatch", 403)
@@ -144,3 +135,63 @@ var ReadUserDir = transactions.Transaction{
 		return assetJSON, nil
 	},
 }
+
+// var ReadUserDir = transactions.Transaction{
+// 	Tag:         "readUserDir",
+// 	Label:       "Read User Directory",
+// 	Description: "Read a User Directory by its publicKeyHash with authentication",
+// 	Method:      "GET",
+// 	Callers: []accesscontrol.Caller{
+// 		{
+// 			MSP: "Org1MSP",
+// 			OU:  "admin",
+// 		}, {
+// 			MSP: "Org2MSP",
+// 			OU:  "admin",
+// 		},
+// 	},
+//
+// 	Args: []transactions.Argument{
+// 		{
+// 			Tag:         "uuid",
+// 			Label:       "UUID",
+// 			Description: "UUID of the User Directory to read",
+// 			DataType:    "string",
+// 			Required:    true,
+// 		},
+// 		{
+// 			Tag:         "certHash",
+// 			Label:       "Certificate Hash",
+// 			Description: "Certificate hash for ownership verification",
+// 			DataType:    "string",
+// 			Required:    true,
+// 		},
+// 	},
+//
+// 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+// 		uuid, _ := req["uuid"].(string)
+// 		certHash, _ := req["certHash"].(string)
+//
+// 		key := assets.Key{
+// 			"@key": "userdir:" + uuid,
+// 		}
+//
+// 		asset, err := key.Get(stub)
+// 		if err != nil {
+// 			return nil, errors.WrapErrorWithStatus(err, "Error reading user directory entry from blockchain", err.Status())
+// 		}
+//
+// 		// Verify ownership - only the owner can read their own directory
+// 		storedCertHash := asset.GetProp("certHash").(string)
+// 		if storedCertHash != certHash {
+// 			return nil, errors.NewCCError("Unauthorized: Certificate hash mismatch", 403)
+// 		}
+//
+// 		assetJSON, nerr := json.Marshal(asset)
+// 		if nerr != nil {
+// 			return nil, errors.WrapError(nil, "failed to encode asset to JSON format")
+// 		}
+//
+// 		return assetJSON, nil
+// 	},
+// }
