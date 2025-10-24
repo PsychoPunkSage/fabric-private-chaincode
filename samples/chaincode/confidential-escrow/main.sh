@@ -231,19 +231,37 @@ test_create_user_dir() {
     }"
 }
 
-test_create_escrow() {
-    log_info "Creating escrow..."
+# test_create_escrow() {
+#     log_info "Creating escrow..."
+#     cd $FPC_PATH/samples/application/simple-cli-go
+#     local output=$(./fpcclient invoke createEscrow "{
+#     \"escrowId\": \"escrow-111\",
+#     \"buyerPubKey\": \"buyer_pub\",
+#     \"sellerPubKey\": \"seller_pub\",
+#     \"amount\": 20,
+#     \"assetType\": $DIGITAL_ASSET_JSON,
+#     \"conditionValue\": \"$(echo -n 'secret123' | sha256sum | cut -d' ' -f1)\",
+#     \"status\": \"Active\",
+#     \"buyerCertHash\": \"sha256:buyer_cert\"
+#   }" 2>&1)
+#     echo "$output"
+#     store_escrow_data "$output"
+# }
+
+test_create_and_lock_escrow() {
+    log_info "Creating escrow and locking funds..."
     cd $FPC_PATH/samples/application/simple-cli-go
-    local output=$(./fpcclient invoke createEscrow "{
-    \"escrowId\": \"escrow-111\",
-    \"buyerPubKey\": \"buyer_pub\",
-    \"sellerPubKey\": \"seller_pub\",
-    \"amount\": 20,
-    \"assetType\": $DIGITAL_ASSET_JSON,
-    \"conditionValue\": \"$(echo -n 'secret123' | sha256sum | cut -d' ' -f1)\",
-    \"status\": \"Active\",
-    \"buyerCertHash\": \"sha256:buyer_cert\"
-  }" 2>&1)
+    local output=$(./fpcclient invoke createAndLockEscrow "{
+        \"escrowId\": \"escrow-111\",
+        \"buyerPubKey\": \"buyer_pub\",
+        \"sellerPubKey\": \"seller_pub\",
+        \"sellerWalletId\": \"$WALLET2_UUID\",
+        \"amount\": 20,
+        \"assetType\": $DIGITAL_ASSET_JSON,
+        \"conditionValue\": \"$(echo -n 'secret123' | sha256sum | cut -d' ' -f1)\",
+        \"payerWalletId\": \"$WALLET_UUID\",
+        \"payerCertHash\": \"sha256:def456\"
+    }" 2>&1)
     echo "$output"
     store_escrow_data "$output"
 }
@@ -317,17 +335,17 @@ test_burn_tokens() {
     }"
 }
 
-test_lock_funds_in_escrow() {
-    log_info "Testing lockFundsInEscrow transaction"
-    cd $FPC_PATH/samples/application/simple-cli-go
-    ./fpcclient invoke lockFundsInEscrow "{
-        \"escrowId\": \"$ESCROW_UUID\",
-        \"payerWalletId\": \"$WALLET_UUID\",
-        \"amount\": 20,
-        \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"payerCertHash\": \"sha256:def456\"
-    }"
-}
+# test_lock_funds_in_escrow() {
+#     log_info "Testing lockFundsInEscrow transaction"
+#     cd $FPC_PATH/samples/application/simple-cli-go
+#     ./fpcclient invoke lockFundsInEscrow "{
+#         \"escrowId\": \"$ESCROW_UUID\",
+#         \"payerWalletId\": \"$WALLET_UUID\",
+#         \"amount\": 20,
+#         \"assetId\": \"$DIGITAL_ASSET_UUID\",
+#         \"payerCertHash\": \"sha256:def456\"
+#     }"
+# }
 
 test_get_escrow_balance() {
     log_info "Testing getEscrowBalance transaction"
@@ -354,8 +372,7 @@ test_release_escrow() {
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke releaseEscrow "{
         \"escrowId\": \"$ESCROW_UUID\",
-        \"payerWalletId\": \"$WALLET_UUID\",
-        \"payeeWalletId\": \"$WALLET2_UUID\"
+        \"payerWalletId\": \"$WALLET_UUID\"
     }"
 }
 

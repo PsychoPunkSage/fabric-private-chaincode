@@ -85,6 +85,7 @@ WALLET_BALANCE="${WALLET_BALANCE:-0}"
 ESCROW_BALANCE="${ESCROW_BALANCE:-0}"
 LAST_ESCROW_UUID="${LAST_ESCROW_UUID:-}"
 LAST_ESCROW_SECRET="${LAST_ESCROW_SECRET:-}"
+LAST_PARCEL_ID="${LAST_PARCEL_ID:-}"
 EOF
 }
 
@@ -114,14 +115,14 @@ setup_user_env() {
     case "$user" in
     "alice")
         USER_MODE="alice"
-        USER_NAME="Alice"
+        USER_NAME="alice"
         USER_ORG="Org1MSP"
         CERT_HASH="sha256:alice_cert"
         env_file="$FPC_PATH/samples/chaincode/confidential-escrow/.env.alice"
         ;;
     "bob")
         USER_MODE="bob"
-        USER_NAME="Bob"
+        USER_NAME="bob"
         USER_ORG="Org2MSP"
         CERT_HASH="sha256:bob_cert"
         env_file="$FPC_PATH/samples/chaincode/confidential-escrow/.env.bob"
@@ -143,7 +144,8 @@ setup_user_env() {
     log_info "Loaded $USER_NAME environment from $(basename $env_file)"
 
     # Check if this peer's enclave is initialized
-    local enclave_marker="/tmp/fpc_enclave_${USER_MODE}_initialized"
+    # local enclave_marker="/tmp/fpc_enclave_${USER_MODE}_initialized"
+    local enclave_marker="/tmp/fpc_enclave_initialized"
 
     if [ ! -f "$enclave_marker" ]; then
         log_info "$USER_NAME's enclave not initialized. Setting up now..."
@@ -187,6 +189,11 @@ extract_asset_uuid() {
 extract_balance() {
     local output="$1"
     echo "$output" | grep -o '"balance":[0-9]*' | head -1 | cut -d':' -f2
+}
+
+extract_escrow_balance() {
+    local output="$1"
+    echo "$output" | grep -o '"escrowBalance":[0-9]*' | head -1 | cut -d":" -f2
 }
 
 # Run fpcclient command with error handling
@@ -244,8 +251,8 @@ show_dashboard() {
 show_user_dashboard() {
     load_state
 
-    local wallet_display="${WALLET_UUID:0:8}"
-    [ -n "$WALLET_UUID" ] && wallet_display="${wallet_display}..." || wallet_display="Not created"
+    local wallet_display="${WALLET_UUID}"
+    [ -n "$WALLET_UUID" ] && wallet_display="${wallet_display}" || wallet_display="Not created"
 
     echo -e "${CYAN}║${NC} ${GREEN}User:${NC} $USER_NAME ($USER_ORG)                                    ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC} ${GREEN}Wallet UUID:${NC} ${wallet_display}                                   ${CYAN}║${NC}"
@@ -282,7 +289,7 @@ show_monitor_dashboard() {
     if [ -f "$ALICE_STATE" ]; then
         source "$ALICE_STATE"
         local alice_wallet="${WALLET_UUID}"
-        [ -n "$WALLET_UUID" ] && alice_wallet="${alice_wallet}..." || alice_wallet="No wallet"
+        [ -n "$WALLET_UUID" ] && alice_wallet="${alice_wallet}" || alice_wallet="No wallet"
         printf "${CYAN}║${NC} Alice: Wallet: %-20s Balance: %-10s ${CYAN}║${NC}\n" "$alice_wallet" "${WALLET_BALANCE:-0}"
     else
         echo -e "${CYAN}║${NC} Alice: Not active                                        ${CYAN}║${NC}"
@@ -290,8 +297,8 @@ show_monitor_dashboard() {
 
     if [ -f "$BOB_STATE" ]; then
         source "$BOB_STATE"
-        local bob_wallet="${WALLET_UUID:0:8}"
-        [ -n "$WALLET_UUID" ] && bob_wallet="${bob_wallet}..." || bob_wallet="No wallet"
+        local bob_wallet="${WALLET_UUID}"
+        [ -n "$WALLET_UUID" ] && bob_wallet="${bob_wallet}" || bob_wallet="No wallet"
         printf "${CYAN}║${NC} Bob:   Wallet: %-20s Balance: %-10s ${CYAN}║${NC}\n" "$bob_wallet" "${WALLET_BALANCE:-0}"
     else
         echo -e "${CYAN}║${NC} Bob:   Not active                                        ${CYAN}║${NC}"
@@ -314,13 +321,13 @@ show_monitor_dashboard() {
 show_main_menu() {
     echo
     echo -e "${YELLOW}═══ MAIN MENU ═══${NC}"
-    echo "1. Setup System (Initialize Digital Asset)"
-    echo "2. Wallet Operations"
-    echo "3. Token Operations"
-    echo "4. Escrow Operations"
-    echo "5. Query Operations"
-    echo "6. Refresh Dashboard"
-    echo "7. View Activity Log"
+    # echo "1. Setup System (Initialize Digital Asset)"
+    echo "1. Wallet Operations"
+    echo "2. Token Operations"
+    echo "3. Escrow Operations"
+    echo "4. Query Operations"
+    echo "5. Refresh Dashboard"
+    echo "6. View Activity Log"
     echo "0. Exit"
     echo
 }
@@ -349,12 +356,11 @@ show_escrow_menu() {
     echo
     echo -e "${YELLOW}═══ ESCROW OPERATIONS ═══${NC}"
     echo "1. Create Escrow"
-    echo "2. Lock Funds in Escrow"
-    echo "3. Verify Escrow Condition"
-    echo "4. Release Escrow"
-    echo "5. Refund Escrow"
-    echo "6. Check Escrow Balance"
-    echo "7. Query Escrow Details"
+    echo "2. Verify Escrow Condition"
+    echo "3. Release Escrow"
+    echo "4. Refund Escrow"
+    echo "5. Check Escrow Balance"
+    echo "6. Query Escrow Details"
     echo "0. Back to Main Menu"
     echo
 }
@@ -385,36 +391,36 @@ show_monitor_menu() {
 }
 
 # System operations
-setup_system() {
-    log_info "Setting up digital asset..."
-    load_state
-
-    if [ "$SYSTEM_INITIALIZED" = "true" ]; then
-        log_info "System already initialized with asset: ${DIGITAL_ASSET_UUID}..."
-        return 0
-    fi
-
-    local output
-    if output=$(run_fpcclient "invoke" "createDigitalAsset" '{
-        "name": "CBDC",
-        "symbol": "CBDC",
-        "decimals": 2,
-        "totalSupply": 1000000,
-        "owner": "central_bank",
-        "issuerHash": "sha256:central_bank_cert"
-    }' "Creating digital asset CBDC"); then
-        DIGITAL_ASSET_UUID=$(extract_uuid "$output" "digitalAsset")
-        DIGITAL_ASSET_JSON=$(echo "$output" | grep '^>' | sed 's/^> //')
-        SYSTEM_INITIALIZED="true"
-        save_shared_state
-        log_activity "$USER_NAME" "Created digital asset CBDC (UUID: ${DIGITAL_ASSET_UUID}...)"
-        log_success "Digital asset created successfully!"
-        echo "UUID: $DIGITAL_ASSET_UUID"
-    else
-        log_error "Failed to create digital asset"
-        return 1
-    fi
-}
+# setup_system() {
+#     log_info "Setting up digital asset..."
+#     load_state
+#
+#     if [ "$SYSTEM_INITIALIZED" = "true" ]; then
+#         log_info "System already initialized with asset: ${DIGITAL_ASSET_UUID}..."
+#         return 0
+#     fi
+#
+#     local output
+#     if output=$(run_fpcclient "invoke" "createDigitalAsset" '{
+#         "name": "CBDC",
+#         "symbol": "CBDC",
+#         "decimals": 2,
+#         "totalSupply": 1000000,
+#         "owner": "central_bank",
+#         "issuerHash": "sha256:central_bank_cert"
+#     }' "Creating digital asset CBDC"); then
+#         DIGITAL_ASSET_UUID=$(extract_uuid "$output" "digitalAsset")
+#         DIGITAL_ASSET_JSON=$(echo "$output" | grep '^>' | sed 's/^> //')
+#         SYSTEM_INITIALIZED="true"
+#         save_shared_state
+#         log_activity "$USER_NAME" "Created digital asset CBDC (UUID: ${DIGITAL_ASSET_UUID}...)"
+#         log_success "Digital asset created successfully!"
+#         echo "UUID: $DIGITAL_ASSET_UUID"
+#     else
+#         log_error "Failed to create digital asset"
+#         return 1
+#     fi
+# }
 
 # Wallet operations
 create_wallet() {
@@ -425,41 +431,49 @@ create_wallet() {
         return 0
     fi
 
-    if [ -z "$DIGITAL_ASSET_JSON" ]; then
-        log_error "Please setup the system first (Option 1 in Main Menu)!"
-        return 1
+    # Create digital asset if not exists
+    if [ "$SYSTEM_INITIALIZED" != "true" ]; then
+        log_info "Digital asset not found. Creating automatically..."
+        local output
+        if output=$(run_fpcclient "invoke" "createDigitalAsset" '{
+            "name": "CBDC",
+            "symbol": "CBDC",
+            "decimals": 2,
+            "totalSupply": 1000000,
+            "owner": "central_bank",
+            "issuerHash": "sha256:central_bank_cert"
+        }' "Creating digital asset CBDC"); then
+            DIGITAL_ASSET_UUID=$(extract_uuid "$output" "digitalAsset")
+            DIGITAL_ASSET_JSON=$(echo "$output" | grep '^>' | sed 's/^> //')
+            SYSTEM_INITIALIZED="true"
+            save_shared_state
+            log_activity "$USER_NAME" "Created digital asset CBDC (UUID: ${DIGITAL_ASSET_UUID}...)"
+            log_success "Digital asset created automatically!"
+        else
+            echo "$output"
+            log_error "Failed to create digital asset"
+            return 1
+        fi
     fi
 
     local wallet_id="${USER_MODE}-wallet-$(date +%s)"
 
-    # =======
-    # echo -e "${CYAN}Creating wallet with:${NC}"
-    # echo "  Wallet ID: $wallet_id"
-    # echo "  Owner: $USER_NAME"
-    # echo "  Cert Hash: $CERT_HASH"
-    # echo "  Digital Asset: ${DIGITAL_ASSET_UUID:0:12}..."
-    # echo "  DIGITAL_ASSET_JSON: $DIGITAL_ASSET_JSON"
-    # local json_payload="{
-    #     \"walletId\": \"$wallet_id\",
-    #     \"ownerId\": \"$USER_NAME\",
-    #     \"ownerCertHash\": \"$CERT_HASH\",
-    #     \"balances\": [0],
-    #     \"digitalAssetTypes\": [$DIGITAL_ASSET_JSON]
-    # }"
-    #
-    # echo -e "${YELLOW}JSON Payload:${NC}"
-    # echo "$json_payload" | jq '.' 2>/dev/null || echo "$json_payload"
-    # echo
-    # ======
+    local json_payload="{
+        \"walletId\": \"$wallet_id\",
+        \"ownerPubKey\": \"${USER_NAME}_public_key\",
+        \"ownerCertHash\": \"$CERT_HASH\",
+        \"balances\": [0],
+        \"digitalAssetTypes\": [$DIGITAL_ASSET_JSON]
+    }"
 
     local output
     if output=$(run_fpcclient "invoke" "createWallet" "$json_payload" "Creating wallet for $USER_NAME"); then
+        echo "$output"
+
         WALLET_UUID=$(extract_uuid "$output" "wallet")
 
         if [ -z "$WALLET_UUID" ]; then
             log_error "Failed to extract wallet UUID from response"
-            echo -e "${YELLOW}Response was:${NC}"
-            echo "$output"
             return 1
         fi
 
@@ -469,18 +483,91 @@ create_wallet() {
         save_user_state
         log_activity "$USER_NAME" "Created wallet: ${WALLET_UUID}..."
         log_success "Wallet created successfully!"
-        echo "Wallet UUID: $WALLET_UUID"
-        echo "Wallet ID: $WALLET_ID"
+
+        # Auto-mint 10000 CBDC
+        log_info "Auto-funding wallet with 10000 CBDC..."
+        if output=$(run_fpcclient "invoke" "mintTokens" "{
+            \"assetId\": \"$DIGITAL_ASSET_UUID\",
+            \"walletUUID\": \"$WALLET_UUID\",
+            \"amount\": 10000,
+            \"issuerCertHash\": \"sha256:central_bank_cert\"
+        }" "Minting 10000 CBDC tokens"); then
+            WALLET_BALANCE=10000
+            save_user_state
+            log_activity "$USER_NAME" "Auto-funded wallet with 10000 CBDC"
+            log_success "Wallet funded with 10000 CBDC!"
+        else
+            echo "$output"
+            log_error "Failed to auto-fund wallet"
+        fi
     else
-        log_error "Failed to create wallet"
         echo "$output"
-        echo
-        echo -e "${YELLOW}Troubleshooting:${NC}"
-        echo "1. Make sure you ran 'Setup System' first (Option 1)"
-        echo "2. Check if the network is running properly"
-        echo "3. Verify your environment variables are correct"
+        log_error "Failed to create wallet"
         return 1
     fi
+    # load_state
+    #
+    # if [ -n "$WALLET_UUID" ]; then
+    #     log_info "Wallet already exists: ${WALLET_UUID}..."
+    #     return 0
+    # fi
+    #
+    # if [ -z "$DIGITAL_ASSET_JSON" ]; then
+    #     log_error "Please setup the system first (Option 1 in Main Menu)!"
+    #     return 1
+    # fi
+    #
+    # local wallet_id="${USER_MODE}-wallet-$(date +%s)"
+    #
+    # # =======
+    # # echo -e "${CYAN}Creating wallet with:${NC}"
+    # # echo "  Wallet ID: $wallet_id"
+    # # echo "  Owner: $USER_NAME"
+    # # echo "  Cert Hash: $CERT_HASH"
+    # # echo "  Digital Asset: ${DIGITAL_ASSET_UUID:0:12}..."
+    # # echo "  DIGITAL_ASSET_JSON: $DIGITAL_ASSET_JSON"
+    # local json_payload="{
+    #     \"walletUUID\": \"$wallet_id\",
+    #     \"ownerId\": \"$USER_NAME\",
+    #     \"ownerCertHash\": \"$CERT_HASH\",
+    #     \"balances\": [0],
+    #     \"digitalAssetTypes\": [$DIGITAL_ASSET_JSON]
+    # }"
+    # #
+    # # echo -e "${YELLOW}JSON Payload:${NC}"
+    # # echo "$json_payload" | jq '.' 2>/dev/null || echo "$json_payload"
+    # # echo
+    # # ======
+    #
+    # local output
+    # if output=$(run_fpcclient "invoke" "createWallet" "$json_payload" "Creating wallet for $USER_NAME"); then
+    #     WALLET_UUID=$(extract_uuid "$output" "wallet")
+    #
+    #     if [ -z "$WALLET_UUID" ]; then
+    #         log_error "Failed to extract wallet UUID from response"
+    #         echo -e "${YELLOW}Response was:${NC}"
+    #         echo "$output"
+    #         return 1
+    #     fi
+    #
+    #     WALLET_ID="$wallet_id"
+    #     WALLET_BALANCE=0
+    #     ESCROW_BALANCE=0
+    #     save_user_state
+    #     log_activity "$USER_NAME" "Created wallet: ${WALLET_UUID}..."
+    #     log_success "Wallet created successfully!"
+    #     echo "Wallet UUID: $WALLET_UUID"
+    #     echo "Wallet ID: $WALLET_ID"
+    # else
+    #     log_error "Failed to create wallet"
+    #     echo "$output"
+    #     echo
+    #     echo -e "${YELLOW}Troubleshooting:${NC}"
+    #     echo "1. Make sure you ran 'Setup System' first (Option 1)"
+    #     echo "2. Check if the network is running properly"
+    #     echo "3. Verify your environment variables are correct"
+    #     return 1
+    # fi
 }
 
 check_balance() {
@@ -493,7 +580,7 @@ check_balance() {
 
     local output
     if output=$(run_fpcclient "query" "getBalance" "{
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"assetSymbol\": \"CBDC\",
         \"ownerCertHash\": \"$CERT_HASH\"
     }" "Checking balance for $USER_NAME"); then
@@ -538,7 +625,7 @@ mint_tokens() {
     local output
     if output=$(run_fpcclient "invoke" "mintTokens" "{
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"amount\": $amount,
         \"issuerCertHash\": \"sha256:central_bank_cert\"
     }" "Minting $amount CBDC tokens"); then
@@ -565,10 +652,10 @@ transfer_tokens() {
 
     if [ "$USER_MODE" = "alice" ]; then
         other_user_state="$BOB_STATE"
-        other_user="Bob"
+        other_user="bob"
     else
         other_user_state="$ALICE_STATE"
-        other_user="Alice"
+        other_user="alice"
     fi
 
     if [ ! -f "$other_user_state" ] || [ ! -s "$other_user_state" ]; then
@@ -636,7 +723,7 @@ burn_tokens() {
     local output
     if output=$(run_fpcclient "invoke" "burnTokens" "{
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"amount\": $amount,
         \"issuerCertHash\": \"sha256:central_bank_cert\"
     }" "Burning $amount CBDC tokens"); then
@@ -653,8 +740,29 @@ burn_tokens() {
 create_escrow() {
     load_state
 
-    if [ -z "$DIGITAL_ASSET_JSON" ]; then
-        log_error "Please setup the system first!"
+    if [ -z "$WALLET_UUID" ] || [ -z "$DIGITAL_ASSET_JSON" ]; then
+        log_error "Please create wallet and setup system first!"
+        return 1
+    fi
+
+    local other_user
+    local other_cert_hash
+
+    if [ "$USER_MODE" = "alice" ]; then
+        other_user="bob"
+        other_cert_hash="sha256:bob_cert"
+        other_user_state="$BOB_STATE"
+    else
+        other_user="alice"
+        other_cert_hash="sha256:alice_cert"
+        other_user_state="$ALICE_STATE"
+    fi
+
+    echo -n "Enter parcel ID: "
+    read parcel_id
+
+    if [ -z "$parcel_id" ]; then
+        log_error "Parcel ID cannot be empty!"
         return 1
     fi
 
@@ -666,7 +774,7 @@ create_escrow() {
         return 1
     fi
 
-    echo -n "Enter secret for escrow condition: "
+    echo -n "Enter secret for escrow: "
     read -s secret
     echo
 
@@ -676,31 +784,117 @@ create_escrow() {
     fi
 
     local escrow_id="${USER_MODE}-escrow-$(date +%s)"
-    local condition_hash=$(echo -n "$secret" | sha256sum | cut -d' ' -f1)
+    local buyer_wallet="$WALLET_UUID"
+
+    source "$other_user_state"
+    local seller_wallet="$WALLET_UUID"
+
+    source "${STATE_DIR}/${USER_MODE}.state"
+    source "$SHARED_STATE"
 
     local output
-    if output=$(run_fpcclient "invoke" "createEscrow" "{
+    if output=$(run_fpcclient "invoke" "createAndLockEscrow" "{
         \"escrowId\": \"$escrow_id\",
         \"buyerPubKey\": \"${USER_MODE}_public_key\",
-        \"sellerPubKey\": \"other_public_key\",
+        \"sellerPubKey\": \"${other_user}_public_key\",
         \"amount\": $amount,
         \"assetType\": $DIGITAL_ASSET_JSON,
-        \"conditionValue\": \"$condition_hash\",
-        \"status\": \"Created\",
-        \"buyerCertHash\": \"$CERT_HASH\"
-    }" "Creating escrow"); then
+        \"parcelId\": \"$parcel_id\",
+        \"secret\": \"$secret\",
+        \"buyerCertHash\": \"$CERT_HASH\",
+        \"buyerWalletUUID\": \"$buyer_wallet\",
+        \"sellerWalletUUID\": \"$seller_wallet\"
+    }" "Creating escrow for parcel $parcel_id"); then
         local escrow_uuid=$(extract_uuid "$output" "escrow")
         LAST_ESCROW_UUID="$escrow_uuid"
         LAST_ESCROW_SECRET="$secret"
+        LAST_PARCEL_ID="$parcel_id"
         save_user_state
-        log_activity "$USER_NAME" "Created escrow: ${escrow_uuid}... (Amount: $amount CBDC)"
-        log_success "Escrow created successfully!"
+        log_activity "$USER_NAME" "Created escrow for parcel $parcel_id with $other_user: ${escrow_uuid}..."
+        check_balance
+        log_success "Escrow created and funds locked successfully!"
         echo "Escrow UUID: $escrow_uuid"
-        echo "Remember your secret for verification!"
+        echo "Parcel ID: $parcel_id"
+        echo "Remember your secret!"
     else
+        echo "$output"
         log_error "Failed to create escrow"
         return 1
     fi
+    # load_state
+    #
+    # if [ -z "$WALLET_UUID" ] || [ -z "$DIGITAL_ASSET_JSON" ]; then
+    #     log_error "Please create wallet and setup system first!"
+    #     return 1
+    # fi
+    #
+    # # Get other user's cert hash (for seller)
+    # local other_user
+    # local other_cert_hash
+    #
+    # if [ "$USER_MODE" = "alice" ]; then
+    #     other_user="bob"
+    #     other_cert_hash="sha256:bob_cert"
+    #     other_user_state="$BOB_STATE"
+    # else
+    #     other_user="alice"
+    #     other_cert_hash="sha256:alice_cert"
+    #     other_user_state="$ALICE_STATE"
+    # fi
+    #
+    # echo -n "Enter escrow amount: "
+    # read amount
+    #
+    # if ! [[ "$amount" =~ ^[0-9]+$ ]] || [ "$amount" -le 0 ]; then
+    #     log_error "Invalid amount. Please enter a positive number."
+    #     return 1
+    # fi
+    #
+    # echo -n "Enter secret for escrow condition: "
+    # read -s secret
+    # echo
+    #
+    # if [ -z "$secret" ]; then
+    #     log_error "Secret cannot be empty!"
+    #     return 1
+    # fi
+    #
+    # local escrow_id="${USER_MODE}-escrow-$(date +%s)"
+    # local condition_hash=$(echo -n "$secret" | sha256sum | cut -d' ' -f1)
+    #
+    # # Get seller's wallet UUID
+    # source "$other_user_state"
+    # local seller_wallet="$WALLET_UUID"
+    #
+    # local output
+    # if output=$(run_fpcclient "invoke" "createAndLockEscrow" "{
+    #     \"escrowId\": \"$escrow_id\",
+    #     \"buyerPubKey\": \"${USER_MODE}_public_key\",
+    #     \"sellerPubKey\": \"${other_user}_public_key\",
+    #     \"amount\": $amount,
+    #     \"assetType\": $DIGITAL_ASSET_JSON,
+    #     \"conditionValue\": \"$condition_hash\",
+    #     \"buyerCertHash\": \"$CERT_HASH\",
+    #     \"buyerWalletId\": \"$WALLET_UUID\",
+    #     \"sellerWalletId\": \"$seller_wallet\"
+    # }" "Creating escrow with $other_user and locking $amount CBDC"); then
+    #     # \"buyerWalletId\": \"$WALLET_UUID\",
+    #     echo "$output"
+    #     local escrow_uuid=$(extract_uuid "$output" "escrow")
+    #     LAST_ESCROW_UUID="$escrow_uuid"
+    #     LAST_ESCROW_SECRET="$secret"
+    #     save_user_state
+    #     log_activity "$USER_NAME" "Created escrow with $other_user, locked $amount CBDC: ${escrow_uuid}..."
+    #     check_balance
+    #     log_success "Escrow created and funds locked successfully!"
+    #     echo "Escrow UUID: $escrow_uuid"
+    #     echo "Seller: $other_user"
+    #     echo "Remember your secret for verification!"
+    # else
+    #     echo "$output"
+    #     log_error "Failed to create escrow"
+    #     return 1
+    # fi
 }
 
 lock_funds_in_escrow() {
@@ -800,59 +994,66 @@ release_escrow() {
         return 1
     fi
 
-    # Get other user's wallet for payee
-    local other_user_state
-    local other_user
+    echo -n "Enter escrow UUID to release: "
+    read escrow_uuid
 
-    if [ "$USER_MODE" = "alice" ]; then
-        other_user_state="$BOB_STATE"
-        other_user="Bob"
-    else
-        other_user_state="$ALICE_STATE"
-        other_user="Alice"
-    fi
+    echo -n "Enter parcel ID: "
+    read parcel_id
 
-    if [ ! -f "$other_user_state" ] || [ ! -s "$other_user_state" ]; then
-        log_error "$other_user hasn't created a wallet yet!"
-        return 1
-    fi
-
-    source "$other_user_state"
-    local payee_wallet="$WALLET_UUID"
-
-    # Reload our state
-    source "${STATE_DIR}/${USER_MODE}.state"
-    source "$SHARED_STATE"
-
-    if [ -z "$LAST_ESCROW_UUID" ]; then
-        echo -n "Enter escrow UUID to release: "
-        read escrow_uuid
-    else
-        echo "Last escrow: ${LAST_ESCROW_UUID}..."
-        echo -n "Use this escrow? (y/n): "
-        read use_last
-
-        if [ "$use_last" = "y" ] || [ "$use_last" = "Y" ]; then
-            escrow_uuid="$LAST_ESCROW_UUID"
-        else
-            echo -n "Enter escrow UUID: "
-            read escrow_uuid
-        fi
-    fi
+    echo -n "Enter secret provided by buyer: "
+    read -s secret
+    echo
 
     local output
     if output=$(run_fpcclient "invoke" "releaseEscrow" "{
-        \"escrowId\": \"$escrow_uuid\",
-        \"payerWalletId\": \"$WALLET_UUID\",
-        \"payeeWalletId\": \"$payee_wallet\"
-    }" "Releasing escrow to $other_user"); then
-        log_activity "$USER_NAME" "Released escrow ${escrow_uuid}... to $other_user"
+        \"escrowUUID\": \"$escrow_uuid\",
+        \"secret\": \"$secret\",
+        \"parcelId\": \"$parcel_id\",
+        \"sellerCertHash\": \"$CERT_HASH\"
+    }" "Releasing escrow"); then
+        log_activity "$USER_NAME" "Released escrow ${escrow_uuid}..."
         check_balance
-        log_success "Escrow released successfully to $other_user!"
+        log_success "Escrow released! Funds transferred to your wallet."
     else
+        echo "$output"
         log_error "Failed to release escrow"
         return 1
     fi
+    # load_state
+    #
+    # if [ -z "$WALLET_UUID" ]; then
+    #     log_error "Please create a wallet first!"
+    #     return 1
+    # fi
+    #
+    # if [ -z "$LAST_ESCROW_UUID" ]; then
+    #     echo -n "Enter escrow UUID to release: "
+    #     read escrow_uuid
+    # else
+    #     echo "Last escrow: ${LAST_ESCROW_UUID}..."
+    #     echo -n "Use this escrow? (y/n): "
+    #     read use_last
+    #
+    #     if [ "$use_last" = "y" ] || [ "$use_last" = "Y" ]; then
+    #         escrow_uuid="$LAST_ESCROW_UUID"
+    #     else
+    #         echo -n "Enter escrow UUID: "
+    #         read escrow_uuid
+    #     fi
+    # fi
+    #
+    # local output
+    # if output=$(run_fpcclient "invoke" "releaseEscrow" "{
+    #     \"escrowId\": \"$escrow_uuid\",
+    #     \"payerWalletId\": \"$WALLET_UUID\",
+    # }" "Releasing escrow to $other_user"); then
+    #     log_activity "$USER_NAME" "Released escrow ${escrow_uuid}... to $other_user"
+    #     check_balance
+    #     log_success "Escrow released successfully to $other_user!"
+    # else
+    #     log_error "Failed to release escrow"
+    #     return 1
+    # fi
 }
 
 refund_escrow() {
@@ -867,7 +1068,7 @@ refund_escrow() {
         echo -n "Enter escrow UUID to refund: "
         read escrow_uuid
     else
-        echo "Last escrow: ${LAST_ESCROW_UUID}..."
+        echo "Last escrow: ${LAST_ESCROW_UUID}"
         echo -n "Use this escrow? (y/n): "
         read use_last
 
@@ -881,16 +1082,53 @@ refund_escrow() {
 
     local output
     if output=$(run_fpcclient "invoke" "refundEscrow" "{
-        \"escrowId\": \"$escrow_uuid\",
-        \"payerWalletId\": \"$WALLET_UUID\"
+        \"escrowUUID\": \"$escrow_uuid\",
+        \"buyerWalletUUID\": \"$WALLET_UUID\",
+        \"buyerCertHash\": \"$CERT_HASH\"
     }" "Refunding escrow"); then
         log_activity "$USER_NAME" "Refunded escrow ${escrow_uuid}..."
         check_balance
-        log_success "Escrow refunded successfully!"
+        log_success "Escrow refunded! Funds returned to your wallet."
     else
+        echo "$output"
         log_error "Failed to refund escrow"
         return 1
     fi
+    # load_state
+    #
+    # if [ -z "$WALLET_UUID" ]; then
+    #     log_error "Please create a wallet first!"
+    #     return 1
+    # fi
+    #
+    # if [ -z "$LAST_ESCROW_UUID" ]; then
+    #     echo -n "Enter escrow UUID to refund: "
+    #     read escrow_uuid
+    # else
+    #     echo "Last escrow: ${LAST_ESCROW_UUID}..."
+    #     echo -n "Use this escrow? (y/n): "
+    #     read use_last
+    #
+    #     if [ "$use_last" = "y" ] || [ "$use_last" = "Y" ]; then
+    #         escrow_uuid="$LAST_ESCROW_UUID"
+    #     else
+    #         echo -n "Enter escrow UUID: "
+    #         read escrow_uuid
+    #     fi
+    # fi
+    #
+    # local output
+    # if output=$(run_fpcclient "invoke" "refundEscrow" "{
+    #     \"escrowId\": \"$escrow_uuid\",
+    #     \"payerWalletId\": \"$WALLET_UUID\"
+    # }" "Refunding escrow"); then
+    #     log_activity "$USER_NAME" "Refunded escrow ${escrow_uuid}..."
+    #     check_balance
+    #     log_success "Escrow refunded successfully!"
+    # else
+    #     log_error "Failed to refund escrow"
+    #     return 1
+    # fi
 }
 
 check_escrow_balance() {
@@ -903,11 +1141,12 @@ check_escrow_balance() {
 
     local output
     if output=$(run_fpcclient "query" "getEscrowBalance" "{
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"assetSymbol\": \"CBDC\",
         \"ownerCertHash\": \"$CERT_HASH\"
     }" "Checking escrow balance"); then
-        local balance=$(extract_balance "$output")
+        echo "$output"
+        local balance=$(extract_escrow_balance "$output")
         ESCROW_BALANCE=${balance:-0}
         save_user_state
         log_success "Current escrow balance: $ESCROW_BALANCE CBDC"
@@ -971,29 +1210,56 @@ get_wallet_by_owner() {
 
 # Monitor operations
 run_monitor() {
+    local last_activity_hash=""
+    local last_alice_hash=""
+    local last_bob_hash=""
+
     while true; do
-        show_dashboard
-        show_monitor_menu
-        read -p "Choose option: " choice
+        # Calculate hashes of current state
+        local current_activity_hash=$([ -f "$ACTIVITY_LOG" ] && md5sum "$ACTIVITY_LOG" | cut -d' ' -f1 || echo "")
+        local current_alice_hash=$([ -f "$ALICE_STATE" ] && md5sum "$ALICE_STATE" | cut -d' ' -f1 || echo "")
+        local current_bob_hash=$([ -f "$BOB_STATE" ] && md5sum "$BOB_STATE" | cut -d' ' -f1 || echo "")
 
-        case $choice in
-        1)
-            sleep 1
-            continue
-            ;;
-        2) show_full_activity_log ;;
-        3) clear_activity_log ;;
-        4) export_system_state ;;
-        5) view_user_state "alice" ;;
-        6) view_user_state "bob" ;;
-        0) exit 0 ;;
-        *) log_error "Invalid option" ;;
-        esac
+        # Check if anything changed
+        if [ "$current_activity_hash" != "$last_activity_hash" ] ||
+            [ "$current_alice_hash" != "$last_alice_hash" ] ||
+            [ "$current_bob_hash" != "$last_bob_hash" ]; then
 
-        if [ $choice -ne 1 ]; then
-            read -p "Press Enter to continue..."
+            show_dashboard
+            echo
+            echo -e "${YELLOW}[Auto-refreshing... Press Ctrl+C to exit]${NC}"
+
+            # Update hashes
+            last_activity_hash="$current_activity_hash"
+            last_alice_hash="$current_alice_hash"
+            last_bob_hash="$current_bob_hash"
         fi
+
+        sleep 2 # Refresh every 2 seconds
     done
+    # while true; do
+    #     show_dashboard
+    #     show_monitor_menu
+    #     read -p "Choose option: " choice
+    #
+    #     case $choice in
+    #     1)
+    #         sleep 1
+    #         continue
+    #         ;;
+    #     2) show_full_activity_log ;;
+    #     3) clear_activity_log ;;
+    #     4) export_system_state ;;
+    #     5) view_user_state "alice" ;;
+    #     6) view_user_state "bob" ;;
+    #     0) exit 0 ;;
+    #     *) log_error "Invalid option" ;;
+    #     esac
+    #
+    #     if [ $choice -ne 1 ]; then
+    #         read -p "Press Enter to continue..."
+    #     fi
+    # done
 }
 
 show_full_activity_log() {
@@ -1103,16 +1369,16 @@ run_user_interface() {
         read -p "Choose option: " choice
 
         case $choice in
-        1) setup_system ;;
-        2) handle_wallet_operations ;;
-        3) handle_token_operations ;;
-        4) handle_escrow_operations ;;
-        5) handle_query_operations ;;
-        6)
+        # 1) setup_system ;;
+        1) handle_wallet_operations ;;
+        2) handle_token_operations ;;
+        3) handle_escrow_operations ;;
+        4) handle_query_operations ;;
+        5)
             sleep 1
             continue
             ;;
-        7) show_full_activity_log ;;
+        6) show_full_activity_log ;;
         0) exit 0 ;;
         *) log_error "Invalid option" ;;
         esac
@@ -1168,12 +1434,11 @@ handle_escrow_operations() {
 
         case $choice in
         1) create_escrow ;;
-        2) lock_funds_in_escrow ;;
-        3) verify_escrow_condition ;;
-        4) release_escrow ;;
-        5) refund_escrow ;;
-        6) check_escrow_balance ;;
-        7) query_escrow ;;
+        2) verify_escrow_condition ;;
+        3) release_escrow ;;
+        4) refund_escrow ;;
+        5) check_escrow_balance ;;
+        6) query_escrow ;;
         0) return ;;
         *) log_error "Invalid option" ;;
         esac
@@ -1248,8 +1513,9 @@ reset_system() {
 
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
         rm -rf "$STATE_DIR"
-        rm -f "/tmp/fpc_enclave_alice_initialized"
-        rm -f "/tmp/fpc_enclave_bob_initialized"
+        rm -rf "tmp/fpc_enclave_initialized"
+        # rm -f "/tmp/fpc_enclave_alice_initialized"
+        # rm -f "/tmp/fpc_enclave_bob_initialized"
         init_state
         log_success "System reset complete!"
         sleep 2
