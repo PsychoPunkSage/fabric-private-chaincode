@@ -141,6 +141,7 @@ var ReadDigitalAsset = transactions.Transaction{
 	},
 
 	Args: []transactions.Argument{
+		// need to find a better way other than UUID.. i.e. search via Symbol or something
 		{
 			Tag:         "uuid",
 			Label:       "UUID",
@@ -195,8 +196,8 @@ var MintTokens = transactions.Transaction{
 			Required:    true,
 		},
 		{
-			Tag:         "walletId",
-			Label:       "Target Wallet ID",
+			Tag:         "walletUUID",
+			Label:       "Target Wallet UUID",
 			Description: "Wallet to mint tokens to",
 			DataType:    "string",
 			Required:    true,
@@ -219,7 +220,7 @@ var MintTokens = transactions.Transaction{
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		assetId, _ := req["assetId"].(string)
-		walletId, _ := req["walletId"].(string)
+		walletUUID, _ := req["walletUUID"].(string)
 		amount, _ := req["amount"].(float64)
 		issuerCertHash, _ := req["issuerCertHash"].(string)
 
@@ -235,7 +236,7 @@ var MintTokens = transactions.Transaction{
 		}
 
 		// Get wallet
-		walletKey := assets.Key{"@key": "wallet:" + walletId}
+		walletKey := assets.Key{"@key": "wallet:" + walletUUID}
 		walletAsset, err := walletKey.Get(stub)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error reading wallet", err.Status())
@@ -275,9 +276,9 @@ var MintTokens = transactions.Transaction{
 		// Create updated wallet map
 		walletMap := make(map[string]interface{})
 		walletMap["@assetType"] = "wallet"
-		walletMap["@key"] = "wallet:" + walletId
+		walletMap["@key"] = "wallet:" + walletUUID
 		walletMap["walletId"] = walletAsset.GetProp("walletId")
-		walletMap["ownerId"] = walletAsset.GetProp("ownerId")
+		walletMap["ownerPubKey"] = walletAsset.GetProp("ownerPubKey")
 		walletMap["ownerCertHash"] = walletAsset.GetProp("ownerCertHash")
 		walletMap["balances"] = balances
 		walletMap["escrowBalances"] = escrowBalances
@@ -320,7 +321,7 @@ var MintTokens = transactions.Transaction{
 		response := map[string]interface{}{
 			"message":     "Tokens minted successfully",
 			"assetId":     assetId,
-			"walletId":    walletId,
+			"walletId":    walletUUID,
 			"amount":      amount,
 			"totalSupply": currentSupply + amount,
 		}
@@ -352,16 +353,16 @@ var TransferTokens = transactions.Transaction{
 
 	Args: []transactions.Argument{
 		{
-			Tag:         "fromWalletId",
-			Label:       "From Wallet ID",
-			Description: "Source wallet ID",
+			Tag:         "fromWalletUUID",
+			Label:       "From Wallet UUID",
+			Description: "Source wallet UUID",
 			DataType:    "string",
 			Required:    true,
 		},
 		{
-			Tag:         "toWalletId",
-			Label:       "To Wallet ID",
-			Description: "Destination wallet ID",
+			Tag:         "toWalletUUID",
+			Label:       "To Wallet UUID",
+			Description: "Destination wallet UUID",
 			DataType:    "string",
 			Required:    true,
 		},
@@ -389,14 +390,14 @@ var TransferTokens = transactions.Transaction{
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		fromWalletId, _ := req["fromWalletId"].(string)
-		toWalletId, _ := req["toWalletId"].(string)
+		fromWalletUUID, _ := req["fromWalletUUID"].(string)
+		toWalletUUID, _ := req["toWalletUUID"].(string)
 		assetId, _ := req["assetId"].(string)
 		amount, _ := req["amount"].(float64)
 		senderCertHash, _ := req["senderCertHash"].(string)
 
 		// Get source wallet
-		fromKey := assets.Key{"@key": "wallet:" + fromWalletId}
+		fromKey := assets.Key{"@key": "wallet:" + fromWalletUUID}
 		fromWalletAsset, err := fromKey.Get(stub)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error reading source wallet", err.Status())
@@ -408,7 +409,7 @@ var TransferTokens = transactions.Transaction{
 		}
 
 		// Get destination wallet
-		toKey := assets.Key{"@key": "wallet:" + toWalletId}
+		toKey := assets.Key{"@key": "wallet:" + toWalletUUID}
 		toWalletAsset, err := toKey.Get(stub)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error reading destination wallet", err.Status())
@@ -479,9 +480,9 @@ var TransferTokens = transactions.Transaction{
 		// Save updated source wallet
 		fromWalletMap := make(map[string]interface{})
 		fromWalletMap["@assetType"] = "wallet"
-		fromWalletMap["@key"] = "wallet:" + fromWalletId
+		fromWalletMap["@key"] = "wallet:" + fromWalletUUID
 		fromWalletMap["walletId"] = fromWalletAsset.GetProp("walletId")
-		fromWalletMap["ownerId"] = fromWalletAsset.GetProp("ownerId")
+		fromWalletMap["ownerPubKey"] = fromWalletAsset.GetProp("ownerPubKey")
 		fromWalletMap["ownerCertHash"] = fromWalletAsset.GetProp("ownerCertHash")
 		fromWalletMap["balances"] = fromBalances
 		fromWalletMap["escrowBalances"] = fromEscrowBalances
@@ -501,9 +502,9 @@ var TransferTokens = transactions.Transaction{
 		// Save updated destination wallet
 		toWalletMap := make(map[string]interface{})
 		toWalletMap["@assetType"] = "wallet"
-		toWalletMap["@key"] = "wallet:" + toWalletId
+		toWalletMap["@key"] = "wallet:" + toWalletUUID
 		toWalletMap["walletId"] = toWalletAsset.GetProp("walletId")
-		toWalletMap["ownerId"] = toWalletAsset.GetProp("ownerId")
+		toWalletMap["ownerPubKey"] = toWalletAsset.GetProp("ownerPubKey")
 		toWalletMap["ownerCertHash"] = toWalletAsset.GetProp("ownerCertHash")
 		toWalletMap["balances"] = toBalances
 		toWalletMap["escrowBalances"] = toEscrowBalances
@@ -522,8 +523,8 @@ var TransferTokens = transactions.Transaction{
 
 		response := map[string]interface{}{
 			"message":      "Transfer completed successfully",
-			"fromWalletId": fromWalletId,
-			"toWalletId":   toWalletId,
+			"fromWalletId": fromWalletUUID,
+			"toWalletId":   toWalletUUID,
 			"assetId":      assetId,
 			"amount":       amount,
 		}
@@ -562,8 +563,8 @@ var BurnTokens = transactions.Transaction{
 			Required:    true,
 		},
 		{
-			Tag:         "walletId",
-			Label:       "Wallet ID",
+			Tag:         "walletUUID",
+			Label:       "Wallet UUID",
 			Description: "Wallet to burn tokens from",
 			DataType:    "string",
 			Required:    true,
@@ -586,7 +587,7 @@ var BurnTokens = transactions.Transaction{
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		assetId, _ := req["assetId"].(string)
-		walletId, _ := req["walletId"].(string)
+		walletUUID, _ := req["walletUUID"].(string)
 		amount, _ := req["amount"].(float64)
 		issuerCertHash, _ := req["issuerCertHash"].(string)
 
@@ -602,7 +603,7 @@ var BurnTokens = transactions.Transaction{
 		}
 
 		// Get wallet
-		walletKey := assets.Key{"@key": "wallet:" + walletId}
+		walletKey := assets.Key{"@key": "wallet:" + walletUUID}
 		walletAsset, err := walletKey.Get(stub)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error reading wallet", err.Status())
@@ -640,9 +641,9 @@ var BurnTokens = transactions.Transaction{
 		// Create updated wallet map
 		walletMap := make(map[string]interface{})
 		walletMap["@assetType"] = "wallet"
-		walletMap["@key"] = "wallet:" + walletId
+		walletMap["@key"] = "wallet:" + walletUUID
 		walletMap["walletId"] = walletAsset.GetProp("walletId")
-		walletMap["ownerId"] = walletAsset.GetProp("ownerId")
+		walletMap["ownerPubKey"] = walletAsset.GetProp("ownerPubKey")
 		walletMap["ownerCertHash"] = walletAsset.GetProp("ownerCertHash")
 		walletMap["balances"] = balances
 		walletMap["escrowBalances"] = walletAsset.GetProp("escrowBalances")
@@ -685,7 +686,7 @@ var BurnTokens = transactions.Transaction{
 		response := map[string]interface{}{
 			"message":     "Tokens burned successfully",
 			"assetId":     assetId,
-			"walletId":    walletId,
+			"walletId":    walletUUID,
 			"amount":      amount,
 			"totalSupply": currentSupply - amount,
 		}
