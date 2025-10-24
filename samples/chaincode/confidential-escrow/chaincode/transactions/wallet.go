@@ -1,7 +1,11 @@
 package transactions
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hyperledger-labs/cc-tools/accesscontrol"
@@ -35,8 +39,8 @@ var CreateWallet = transactions.Transaction{
 			Required:    true,
 		},
 		{
-			Tag:      "ownerId",
-			Label:    "Owner Identity",
+			Tag:      "ownerPubKey",
+			Label:    "Owner Public Key",
 			DataType: "string",
 			Required: true,
 		},
@@ -63,8 +67,15 @@ var CreateWallet = transactions.Transaction{
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		walletId, _ := req["walletId"].(string)
-		ownerId, _ := req["ownerId"].(string)
+		ownerPublicKey, _ := req["ownerPubKey"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
+
+		hash := sha256.Sum256([]byte(ownerPublicKey))
+		pubKeyHash := hex.EncodeToString(hash[:])
+		fmt.Printf("DEBUG: Owner PubKey: %s\n", ownerPublicKey)
+		fmt.Printf("DEBUG: Owner PubKey Hash: %s\n", pubKeyHash)
+		fmt.Printf("DEBUG: Creating UserDir with key: userdir:%s\n", pubKeyHash)
+
 		// balances, _ := req["balances"].([]interface{})
 		// assetTypes, _ := req["digitalAssetTypes"].([]interface{})
 
@@ -90,7 +101,7 @@ var CreateWallet = transactions.Transaction{
 		walletMap := make(map[string]interface{})
 		walletMap["@assetType"] = "wallet"
 		walletMap["walletId"] = walletId
-		walletMap["ownerId"] = ownerId
+		walletMap["ownerPubKey"] = ownerPublicKey
 		walletMap["ownerCertHash"] = ownerCertHash
 		walletMap["escrowBalances"] = make([]interface{}, 0)
 		walletMap["balances"] = make([]interface{}, 0)
@@ -102,9 +113,29 @@ var CreateWallet = transactions.Transaction{
 			return nil, errors.WrapError(err, "Failed to create wallet asset")
 		}
 
-		_, err = walletAsset.PutNew(stub)
+		// _, err = walletAsset.PutNew(stub)
+		_, err = walletAsset.Put(stub)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error saving wallet on blockchain", err.Status())
+		}
+
+		// Create corresponding UserDir entry
+		walletUUID := strings.Split(walletAsset.GetProp("@key").(string), ":")[1]
+
+		userDirMap := make(map[string]interface{})
+		userDirMap["@assetType"] = "userdir"
+		userDirMap["publicKeyHash"] = pubKeyHash // Using certHash as identifier
+		userDirMap["walletUUID"] = walletUUID
+		userDirMap["certHash"] = ownerCertHash
+
+		userDirAsset, err := assets.NewAsset(userDirMap)
+		if err != nil {
+			return nil, errors.WrapError(err, "Failed to create user directory")
+		}
+
+		_, err = userDirAsset.PutNew(stub)
+		if err != nil {
+			return nil, errors.WrapError(err, "Failed to save user directory")
 		}
 
 		assetJSON, nerr := json.Marshal(walletAsset)
@@ -135,9 +166,9 @@ var GetBalance = transactions.Transaction{
 
 	Args: []transactions.Argument{
 		{
-			Tag:         "walletId",
-			Label:       "Wallet ID",
-			Description: "ID of the wallet",
+			Tag:         "walletUUID",
+			Label:       "Wallet UUID",
+			Description: "UUID of the wallet",
 			DataType:    "string",
 			Required:    true,
 		},
@@ -158,7 +189,7 @@ var GetBalance = transactions.Transaction{
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		walletId, _ := req["walletId"].(string)
+		walletId, _ := req["walletUUID"].(string)
 		assetSymbol, _ := req["assetSymbol"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
 
@@ -227,12 +258,12 @@ var GetEscrowBalance = transactions.Transaction{
 		{MSP: "Org2MSP", OU: "admin"},
 	},
 	Args: []transactions.Argument{
-		{Tag: "walletId", DataType: "string", Required: true},
+		{Tag: "walletUUID", DataType: "string", Required: true},
 		{Tag: "assetSymbol", DataType: "string", Required: true},
 		{Tag: "ownerCertHash", DataType: "string", Required: true},
 	},
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		walletId, _ := req["walletId"].(string)
+		walletId, _ := req["walletUUID"].(string)
 		assetSymbol, _ := req["assetSymbol"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
 
@@ -309,7 +340,7 @@ var GetWalletByOwner = transactions.Transaction{
 
 	Args: []transactions.Argument{
 		{
-			Tag:         "walletUuid",
+			Tag:         "walletUUID",
 			Label:       "Wallet UUID",
 			Description: "UUID of the wallet to find",
 			DataType:    "string",
@@ -325,7 +356,7 @@ var GetWalletByOwner = transactions.Transaction{
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		walletUuid, _ := req["walletUuid"].(string)
+		walletUuid, _ := req["walletUUID"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
 
 		// Get wallet directly
