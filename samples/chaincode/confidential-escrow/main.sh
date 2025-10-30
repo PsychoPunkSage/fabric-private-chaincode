@@ -196,7 +196,7 @@ test_create_wallet() {
     cd $FPC_PATH/samples/application/simple-cli-go
     local output=$(./fpcclient invoke createWallet "{
     \"walletId\": \"wallet-111\",
-    \"ownerId\": \"Abhinav\",
+    \"ownerPubKey\": \"Abhinav_public_key\",
     \"ownerCertHash\": \"sha256:def456\", 
     \"balances\": [0],
     \"digitalAssetTypes\": [$DIGITAL_ASSET_JSON]
@@ -211,7 +211,7 @@ test_create_wallet2() {
     cd $FPC_PATH/samples/application/simple-cli-go
     local output=$(./fpcclient invoke createWallet "{
         \"walletId\": \"wallet-222\",
-        \"ownerId\": \"Bob\",
+        \"ownerPubKey\": \"Bob_public_key\",
         \"ownerCertHash\": \"sha256:ghi789\", 
         \"balances\": [0],
         \"digitalAssetTypes\": [$DIGITAL_ASSET_JSON]
@@ -226,27 +226,10 @@ test_create_user_dir() {
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke createUserDir "{
         \"publicKeyHash\": \"pubkey-hash-123\",
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"certHash\": \"sha256:def456\"
     }"
 }
-
-# test_create_escrow() {
-#     log_info "Creating escrow..."
-#     cd $FPC_PATH/samples/application/simple-cli-go
-#     local output=$(./fpcclient invoke createEscrow "{
-#     \"escrowId\": \"escrow-111\",
-#     \"buyerPubKey\": \"buyer_pub\",
-#     \"sellerPubKey\": \"seller_pub\",
-#     \"amount\": 20,
-#     \"assetType\": $DIGITAL_ASSET_JSON,
-#     \"conditionValue\": \"$(echo -n 'secret123' | sha256sum | cut -d' ' -f1)\",
-#     \"status\": \"Active\",
-#     \"buyerCertHash\": \"sha256:buyer_cert\"
-#   }" 2>&1)
-#     echo "$output"
-#     store_escrow_data "$output"
-# }
 
 test_create_and_lock_escrow() {
     log_info "Creating escrow and locking funds..."
@@ -255,12 +238,13 @@ test_create_and_lock_escrow() {
         \"escrowId\": \"escrow-111\",
         \"buyerPubKey\": \"buyer_pub\",
         \"sellerPubKey\": \"seller_pub\",
-        \"sellerWalletId\": \"$WALLET2_UUID\",
         \"amount\": 20,
         \"assetType\": $DIGITAL_ASSET_JSON,
-        \"conditionValue\": \"$(echo -n 'secret123' | sha256sum | cut -d' ' -f1)\",
-        \"payerWalletId\": \"$WALLET_UUID\",
-        \"payerCertHash\": \"sha256:def456\"
+        \"parcelId\": \"par1\",
+        \"secret\": \"sec\",
+        \"sellerWalletUUID\": \"$WALLET2_UUID\",
+        \"buyerWalletUUID\": \"$WALLET_UUID\",
+        \"buyerCertHash\": \"sha256:def456\"
     }" 2>&1)
     echo "$output"
     store_escrow_data "$output"
@@ -286,7 +270,7 @@ test_get_balance() {
     # Test getting balance for CBDCC in wallet1
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient query getBalance "{
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"assetSymbol\": \"CBDCC\", 
         \"ownerCertHash\": \"sha256:def456\"
     }"
@@ -306,7 +290,7 @@ test_mint_tokens() {
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke mintTokens "{
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"amount\": 100,
         \"issuerCertHash\": \"sha256:abc123\"
     }"
@@ -316,8 +300,8 @@ test_transfer_tokens() {
     log_info "Testing transferTokens transaction"
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke transferTokens "{
-        \"fromWalletId\": \"$WALLET_UUID\",
-        \"toWalletId\": \"$WALLET2_UUID\", 
+        \"fromWalletUUID\": \"$WALLET_UUID\",
+        \"toWalletUUID\": \"$WALLET2_UUID\", 
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
         \"amount\": 50,
         \"senderCertHash\": \"sha256:def456\"
@@ -329,29 +313,17 @@ test_burn_tokens() {
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke burnTokens "{
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"amount\": 25,
         \"issuerCertHash\": \"sha256:abc123\"
     }"
 }
 
-# test_lock_funds_in_escrow() {
-#     log_info "Testing lockFundsInEscrow transaction"
-#     cd $FPC_PATH/samples/application/simple-cli-go
-#     ./fpcclient invoke lockFundsInEscrow "{
-#         \"escrowId\": \"$ESCROW_UUID\",
-#         \"payerWalletId\": \"$WALLET_UUID\",
-#         \"amount\": 20,
-#         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-#         \"payerCertHash\": \"sha256:def456\"
-#     }"
-# }
-
 test_get_escrow_balance() {
     log_info "Testing getEscrowBalance transaction"
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient query getEscrowBalance "{
-        \"walletId\": \"$WALLET_UUID\",
+        \"walletUUID\": \"$WALLET_UUID\",
         \"assetSymbol\": \"CBDCC\",
         \"ownerCertHash\": \"sha256:def456\"
     }"
@@ -409,23 +381,6 @@ test_refund_escrow() {
     }"
 }
 
-# test_read_user_dir() {
-#     log_info "Testing readUserDir transaction with authentication"
-#     cd $FPC_PATH/samples/application/simple-cli-go
-#     # This should work - correct cert hash
-#     ./fpcclient query readUserDir "{
-#         \"uuid\": \"pubkey-hash-123\",
-#         \"certHash\": \"sha256:def456\"
-#     }"
-#
-#     log_info "Testing unauthorized access (should fail)"
-#     # This should fail - wrong cert hash
-#     ./fpcclient query readUserDir "{
-#         \"uuid\": \"pubkey-hash-123\",
-#         \"certHash\": \"wrong_hash\"
-#     }" || log_info "Expected failure - unauthorized access blocked"
-# }
-
 test_query_escrow() {
     log_info "Querying escrow..."
     cd $FPC_PATH/samples/application/simple-cli-go
@@ -442,7 +397,7 @@ run_tests() {
     test_create_wallet
     test_create_wallet2
     test_create_user_dir
-    test_create_escrow
+    test_create_and_lock_escrow
     test_query_asset
     test_query_wallet
     test_query_escrow
