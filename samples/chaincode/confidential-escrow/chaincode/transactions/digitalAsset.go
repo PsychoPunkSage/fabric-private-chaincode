@@ -1,6 +1,8 @@
 package transactions
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -196,11 +198,10 @@ var MintTokens = transactions.Transaction{
 			Required:    true,
 		},
 		{
-			Tag:         "walletUUID",
-			Label:       "Target Wallet UUID",
-			Description: "Wallet to mint tokens to",
-			DataType:    "string",
-			Required:    true,
+			Tag:      "pubKey",
+			Label:    "Public Key",
+			DataType: "string",
+			Required: true,
 		},
 		{
 			Tag:         "amount",
@@ -220,9 +221,27 @@ var MintTokens = transactions.Transaction{
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		assetId, _ := req["assetId"].(string)
-		walletUUID, _ := req["walletUUID"].(string)
+		pubKey, _ := req["pubKey"].(string)
 		amount, _ := req["amount"].(float64)
 		issuerCertHash, _ := req["issuerCertHash"].(string)
+
+		// Lookup wallet using publicKeyHash property
+		hash := sha256.Sum256([]byte(pubKey))
+		pubKeyHash := hex.EncodeToString(hash[:])
+
+		userDirKey, err := assets.NewKey(map[string]interface{}{
+			"@assetType":    "userdir",
+			"publicKeyHash": pubKeyHash,
+		})
+		if err != nil {
+			return nil, errors.NewCCError(fmt.Sprintf("Seller's Key cannot be found from user dir: %v", err), 404)
+		}
+
+		userDir, err := userDirKey.Get(stub)
+		if err != nil {
+			return nil, errors.NewCCError("Buyer wallet not found. Buyer must create wallet first.", 404)
+		}
+		walletUUID := userDir.GetProp("walletUUID").(string)
 
 		// Verify issuer authorization
 		assetKey := assets.Key{"@key": "digitalAsset:" + assetId}
@@ -353,16 +372,16 @@ var TransferTokens = transactions.Transaction{
 
 	Args: []transactions.Argument{
 		{
-			Tag:         "fromWalletUUID",
-			Label:       "From Wallet UUID",
-			Description: "Source wallet UUID",
+			Tag:         "fromPubKey",
+			Label:       "From Public Key",
+			Description: "Source Public Key",
 			DataType:    "string",
 			Required:    true,
 		},
 		{
-			Tag:         "toWalletUUID",
-			Label:       "To Wallet UUID",
-			Description: "Destination wallet UUID",
+			Tag:         "toPubKey",
+			Label:       "To Public Key",
+			Description: "Destination Pub Key",
 			DataType:    "string",
 			Required:    true,
 		},
@@ -390,11 +409,29 @@ var TransferTokens = transactions.Transaction{
 	},
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		fromWalletUUID, _ := req["fromWalletUUID"].(string)
-		toWalletUUID, _ := req["toWalletUUID"].(string)
+		fromPubKey, _ := req["fromPubKey"].(string)
+		toPubKey, _ := req["toPubKey"].(string)
 		assetId, _ := req["assetId"].(string)
 		amount, _ := req["amount"].(float64)
 		senderCertHash, _ := req["senderCertHash"].(string)
+
+		// Lookup wallet using publicKeyHash property
+		hash := sha256.Sum256([]byte(fromPubKey))
+		pubKeyHash := hex.EncodeToString(hash[:])
+
+		userDirKey, err := assets.NewKey(map[string]interface{}{
+			"@assetType":    "userdir",
+			"publicKeyHash": pubKeyHash,
+		})
+		if err != nil {
+			return nil, errors.NewCCError(fmt.Sprintf("Seller's Key cannot be found from user dir: %v", err), 404)
+		}
+
+		userDir, err := userDirKey.Get(stub)
+		if err != nil {
+			return nil, errors.NewCCError("Buyer wallet not found. Buyer must create wallet first.", 404)
+		}
+		fromWalletUUID := userDir.GetProp("walletUUID").(string)
 
 		// Get source wallet
 		fromKey := assets.Key{"@key": "wallet:" + fromWalletUUID}
@@ -407,6 +444,24 @@ var TransferTokens = transactions.Transaction{
 		if fromWalletAsset.GetProp("ownerCertHash").(string) != senderCertHash {
 			return nil, errors.NewCCError("Unauthorized: Sender certificate mismatch", 403)
 		}
+
+		// Lookup wallet using publicKeyHash property
+		hash = sha256.Sum256([]byte(toPubKey))
+		pubKeyHash = hex.EncodeToString(hash[:])
+
+		userDirKey, err = assets.NewKey(map[string]interface{}{
+			"@assetType":    "userdir",
+			"publicKeyHash": pubKeyHash,
+		})
+		if err != nil {
+			return nil, errors.NewCCError(fmt.Sprintf("Seller's Key cannot be found from user dir: %v", err), 404)
+		}
+
+		userDir, err = userDirKey.Get(stub)
+		if err != nil {
+			return nil, errors.NewCCError("Buyer wallet not found. Buyer must create wallet first.", 404)
+		}
+		toWalletUUID := userDir.GetProp("walletUUID").(string)
 
 		// Get destination wallet
 		toKey := assets.Key{"@key": "wallet:" + toWalletUUID}
@@ -563,9 +618,9 @@ var BurnTokens = transactions.Transaction{
 			Required:    true,
 		},
 		{
-			Tag:         "walletUUID",
-			Label:       "Wallet UUID",
-			Description: "Wallet to burn tokens from",
+			Tag:         "pubKey",
+			Label:       "Public Key",
+			Description: "Public Key to burn tokens from",
 			DataType:    "string",
 			Required:    true,
 		},
@@ -587,9 +642,27 @@ var BurnTokens = transactions.Transaction{
 
 	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
 		assetId, _ := req["assetId"].(string)
-		walletUUID, _ := req["walletUUID"].(string)
+		pubKey, _ := req["pubKey"].(string)
 		amount, _ := req["amount"].(float64)
 		issuerCertHash, _ := req["issuerCertHash"].(string)
+
+		// Lookup wallet using publicKeyHash property
+		hash := sha256.Sum256([]byte(pubKey))
+		pubKeyHash := hex.EncodeToString(hash[:])
+
+		userDirKey, err := assets.NewKey(map[string]interface{}{
+			"@assetType":    "userdir",
+			"publicKeyHash": pubKeyHash,
+		})
+		if err != nil {
+			return nil, errors.NewCCError(fmt.Sprintf("Seller's Key cannot be found from user dir: %v", err), 404)
+		}
+
+		userDir, err := userDirKey.Get(stub)
+		if err != nil {
+			return nil, errors.NewCCError("Buyer wallet not found. Buyer must create wallet first.", 404)
+		}
+		walletUUID := userDir.GetProp("walletUUID").(string)
 
 		// Verify issuer authorization
 		assetKey := assets.Key{"@key": "digitalAsset:" + assetId}
