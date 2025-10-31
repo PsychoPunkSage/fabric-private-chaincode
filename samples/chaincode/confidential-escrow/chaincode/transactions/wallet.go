@@ -49,11 +49,11 @@ var CreateWallet = transactions.Transaction{
 			Label:       "Owner Certificate Hash",
 			Description: "Hash of Owner's Certificate who created this wallet",
 			DataType:    "string",
-			Required:    true, // testing purpose
+			Required:    true,
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		walletId, _ := req["walletId"].(string)
 		ownerPublicKey, _ := req["ownerPubKey"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
@@ -61,14 +61,14 @@ var CreateWallet = transactions.Transaction{
 		hash := sha256.Sum256([]byte(ownerPublicKey))
 		pubKeyHash := hex.EncodeToString(hash[:])
 
-		walletMap := make(map[string]interface{})
+		walletMap := make(map[string]any)
 		walletMap["@assetType"] = "wallet"
 		walletMap["walletId"] = walletId
 		walletMap["ownerPubKey"] = ownerPublicKey
 		walletMap["ownerCertHash"] = ownerCertHash
-		walletMap["escrowBalances"] = make([]interface{}, 0)
-		walletMap["balances"] = make([]interface{}, 0)
-		walletMap["digitalAssetTypes"] = make([]interface{}, 0)
+		walletMap["escrowBalances"] = make([]any, 0)
+		walletMap["balances"] = make([]any, 0)
+		walletMap["digitalAssetTypes"] = make([]any, 0)
 		walletMap["createdAt"] = time.Now()
 
 		walletAsset, err := assets.NewAsset(walletMap)
@@ -85,7 +85,7 @@ var CreateWallet = transactions.Transaction{
 		// Create corresponding UserDir entry
 		walletUUID := strings.Split(walletAsset.GetProp("@key").(string), ":")[1]
 
-		userDirMap := make(map[string]interface{})
+		userDirMap := make(map[string]any)
 		userDirMap["@assetType"] = "userdir"
 		userDirMap["publicKeyHash"] = pubKeyHash // Using certHash as identifier
 		userDirMap["walletUUID"] = walletUUID
@@ -115,7 +115,6 @@ var GetBalance = transactions.Transaction{
 	Label:       "Get Wallet Balance",
 	Description: "Get balance of a specific token in wallet with authentication",
 	Method:      "GET",
-	// Do we need this?
 	Callers: []accesscontrol.Caller{
 		{
 			MSP: "Org1MSP",
@@ -128,13 +127,6 @@ var GetBalance = transactions.Transaction{
 	},
 
 	Args: []transactions.Argument{
-		// {
-		// 	Tag:         "walletUUID",
-		// 	Label:       "Wallet UUID",
-		// 	Description: "UUID of the wallet",
-		// 	DataType:    "string",
-		// 	Required:    true,
-		// },
 		{
 			Tag:      "pubKey",
 			Label:    "Public Key",
@@ -157,8 +149,7 @@ var GetBalance = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		// walletId, _ := req["walletUUID"].(string)
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		pubKey, _ := req["pubKey"].(string)
 		assetSymbol, _ := req["assetSymbol"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
@@ -167,7 +158,7 @@ var GetBalance = transactions.Transaction{
 		hash := sha256.Sum256([]byte(pubKey))
 		pubKeyHash := hex.EncodeToString(hash[:])
 
-		userDirKey, err := assets.NewKey(map[string]interface{}{
+		userDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": pubKeyHash,
 		})
@@ -197,14 +188,14 @@ var GetBalance = transactions.Transaction{
 		}
 
 		// Find asset index
-		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]interface{})
-		balances := walletAsset.GetProp("balances").([]interface{})
+		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]any)
+		balances := walletAsset.GetProp("balances").([]any)
 
 		for i, assetRef := range digitalAssetTypes {
 			// Get the referenced asset
 			var assetKey string
 			switch ref := assetRef.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				assetKey = ref["@key"].(string)
 			case string:
 				assetKey = "digitalAsset:" + ref
@@ -219,7 +210,7 @@ var GetBalance = transactions.Transaction{
 
 			if asset.GetProp("symbol").(string) == assetSymbol {
 				balance := balances[i].(float64)
-				response := map[string]interface{}{
+				response := map[string]any{
 					"walletId":    walletId,
 					"assetSymbol": assetSymbol,
 					"balance":     balance,
@@ -251,7 +242,7 @@ var GetEscrowBalance = transactions.Transaction{
 		{Tag: "assetSymbol", DataType: "string", Required: true},
 		{Tag: "ownerCertHash", DataType: "string", Required: true},
 	},
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		pubKey, _ := req["pubKey"].(string)
 		assetSymbol, _ := req["assetSymbol"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
@@ -260,7 +251,7 @@ var GetEscrowBalance = transactions.Transaction{
 		hash := sha256.Sum256([]byte(pubKey))
 		pubKeyHash := hex.EncodeToString(hash[:])
 
-		userDirKey, err := assets.NewKey(map[string]interface{}{
+		userDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": pubKeyHash,
 		})
@@ -290,14 +281,14 @@ var GetEscrowBalance = transactions.Transaction{
 		}
 
 		// Find asset index
-		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]interface{})
-		escrowBalances := walletAsset.GetProp("escrowBalances").([]interface{})
+		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]any)
+		escrowBalances := walletAsset.GetProp("escrowBalances").([]any)
 
 		for i, assetRef := range digitalAssetTypes {
 			// Get the referenced asset
 			var assetKey string
 			switch ref := assetRef.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				assetKey = ref["@key"].(string)
 			case string:
 				assetKey = "digitalAsset:" + ref
@@ -312,7 +303,7 @@ var GetEscrowBalance = transactions.Transaction{
 
 			if asset.GetProp("symbol").(string) == assetSymbol {
 				escrowBalance := escrowBalances[i].(float64)
-				response := map[string]interface{}{
+				response := map[string]any{
 					"walletId":      walletId,
 					"assetSymbol":   assetSymbol,
 					"escrowBalance": escrowBalance,
@@ -346,14 +337,12 @@ var GetWalletByOwner = transactions.Transaction{
 	},
 
 	Args: []transactions.Argument{
-		// {
-		// 	Tag:         "walletUUID",
-		// 	Label:       "Wallet UUID",
-		// 	Description: "UUID of the wallet to find",
-		// 	DataType:    "string",
-		// 	Required:    true,
-		// },
-		{Tag: "pubKey", Label: "Public Key", DataType: "string", Required: true},
+		{
+			Tag:      "pubKey",
+			Label:    "Public Key",
+			DataType: "string",
+			Required: true,
+		},
 		{
 			Tag:         "ownerCertHash",
 			Label:       "Owner Certificate Hash",
@@ -363,7 +352,7 @@ var GetWalletByOwner = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		pubKey, _ := req["pubKey"].(string)
 		ownerCertHash, _ := req["ownerCertHash"].(string)
 
@@ -371,7 +360,7 @@ var GetWalletByOwner = transactions.Transaction{
 		hash := sha256.Sum256([]byte(pubKey))
 		pubKeyHash := hex.EncodeToString(hash[:])
 
-		userDirKey, err := assets.NewKey(map[string]interface{}{
+		userDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": pubKeyHash,
 		})
@@ -405,88 +394,3 @@ var GetWalletByOwner = transactions.Transaction{
 		return responseJSON, nil
 	},
 }
-
-// Need to impose restriction
-var ReadWallet = transactions.Transaction{
-	Tag:         "readWallet",
-	Label:       "Read Wallet",
-	Description: "Read a Wallet by its walletId",
-	Method:      "GET",
-	Callers: []accesscontrol.Caller{
-		{
-			MSP: "Org1MSP",
-			OU:  "admin",
-		}, {
-			MSP: "Org2MSP",
-			OU:  "admin",
-		},
-	},
-
-	Args: []transactions.Argument{
-		{Tag: "pubKey", Label: "Public Key", DataType: "string", Required: true},
-		//
-		// {
-		// 	Tag:         "uuid",
-		// 	Label:       "UUID",
-		// 	Description: "UUID of the wallet to read",
-		// 	DataType:    "string",
-		// 	Required:    true,
-		// },
-	},
-
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
-		pubKey, _ := req["pubKey"].(string)
-
-		// Lookup wallet using publicKeyHash property
-		hash := sha256.Sum256([]byte(pubKey))
-		pubKeyHash := hex.EncodeToString(hash[:])
-
-		userDirKey, err := assets.NewKey(map[string]interface{}{
-			"@assetType":    "userdir",
-			"publicKeyHash": pubKeyHash,
-		})
-		if err != nil {
-			return nil, errors.NewCCError(fmt.Sprintf("Seller's Key cannot be found from user dir: %v", err), 404)
-		}
-
-		userDir, err := userDirKey.Get(stub)
-		if err != nil {
-			return nil, errors.NewCCError("Buyer wallet not found. Buyer must create wallet first.", 404)
-		}
-		uuid := userDir.GetProp("walletUUID").(string)
-
-		key := assets.Key{
-			"@key": "wallet:" + uuid,
-		}
-
-		asset, err := key.Get(stub)
-		if err != nil {
-			return nil, errors.WrapErrorWithStatus(err, "Error reading wallet from blockchain", err.Status())
-		}
-
-		assetJSON, nerr := json.Marshal(asset)
-		if nerr != nil {
-			return nil, errors.WrapError(nil, "failed to encode wallet to JSON format")
-		}
-
-		return assetJSON, nil
-	},
-}
-
-/*
-1. Use hash(txnId) => UUID
-2. get it from `stub`
-
----
-
-Split txnID pool among user
-	-> Modulo ops
-
--> Better random num gen
-	-> sha256(<Abhinav>_<i=RNG>_<j=counter>)
-
----
-
-use txnID as UUID of the assets
-	-> For multiple asset generated in 1 txn => Deal with it using counter or something
-*/

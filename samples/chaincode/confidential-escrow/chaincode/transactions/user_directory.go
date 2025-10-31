@@ -48,12 +48,12 @@ var CreateUserDir = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		publicKeyHash, _ := req["publicKeyHash"].(string)
 		walletId, _ := req["walletUUID"].(string)
 		certHash, _ := req["certHash"].(string)
 
-		userDirMap := make(map[string]interface{})
+		userDirMap := make(map[string]any)
 		userDirMap["@assetType"] = "userdir"
 		userDirMap["publicKeyHash"] = publicKeyHash
 		userDirMap["walletUUID"] = walletId
@@ -112,7 +112,7 @@ var ReadUserDir = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		userDirRef, _ := req["userDir"].(assets.Key)
 		certHash, _ := req["certHash"].(string)
 
