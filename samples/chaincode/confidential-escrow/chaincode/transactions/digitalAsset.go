@@ -83,7 +83,7 @@ var CreateDigitalAsset = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		name, _ := req["name"].(string)
 		symbol, _ := req["symbol"].(string)
 		decimals, _ := req["decimals"].(float64)
@@ -91,7 +91,7 @@ var CreateDigitalAsset = transactions.Transaction{
 		owner, _ := req["owner"].(string)
 		issuerHash, _ := req["issuerHash"].(string)
 
-		assetMap := make(map[string]interface{})
+		assetMap := make(map[string]any)
 		assetMap["@assetType"] = "digitalAsset"
 		assetMap["name"] = name
 		assetMap["symbol"] = symbol
@@ -153,7 +153,7 @@ var ReadDigitalAsset = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		uuid, _ := req["uuid"].(string)
 		key := assets.Key{
 			"@key": "digitalAsset:" + uuid,
@@ -219,7 +219,7 @@ var MintTokens = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		assetId, _ := req["assetId"].(string)
 		pubKey, _ := req["pubKey"].(string)
 		amount, _ := req["amount"].(float64)
@@ -229,7 +229,7 @@ var MintTokens = transactions.Transaction{
 		hash := sha256.Sum256([]byte(pubKey))
 		pubKeyHash := hex.EncodeToString(hash[:])
 
-		userDirKey, err := assets.NewKey(map[string]interface{}{
+		userDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": pubKeyHash,
 		})
@@ -261,16 +261,16 @@ var MintTokens = transactions.Transaction{
 			return nil, errors.WrapErrorWithStatus(err, "Error reading wallet", err.Status())
 		}
 
-		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]interface{})
-		balances := walletAsset.GetProp("balances").([]interface{})
-		escrowBalances := walletAsset.GetProp("escrowBalances").([]interface{})
+		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]any)
+		balances := walletAsset.GetProp("balances").([]any)
+		escrowBalances := walletAsset.GetProp("escrowBalances").([]any)
 
 		// Find asset index and update balance
 		assetFound := false
 		for i, assetRef := range digitalAssetTypes {
 			var refAssetId string
 			switch ref := assetRef.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				refAssetId = strings.Split(ref["@key"].(string), ":")[1]
 			case string:
 				refAssetId = ref
@@ -285,59 +285,37 @@ var MintTokens = transactions.Transaction{
 		}
 
 		if !assetFound {
-			digitalAssetTypes = append(digitalAssetTypes, map[string]interface{}{
+			digitalAssetTypes = append(digitalAssetTypes, map[string]any{
 				"@key": "digitalAsset:" + assetId,
 			})
 			balances = append(balances, amount)
 			escrowBalances = append(escrowBalances, 0.0)
 		}
 
-		// Create updated wallet map
-		walletMap := make(map[string]interface{})
-		walletMap["@assetType"] = "wallet"
-		walletMap["@key"] = "wallet:" + walletUUID
-		walletMap["walletId"] = walletAsset.GetProp("walletId")
-		walletMap["ownerPubKey"] = walletAsset.GetProp("ownerPubKey")
-		walletMap["ownerCertHash"] = walletAsset.GetProp("ownerCertHash")
-		walletMap["balances"] = balances
-		walletMap["escrowBalances"] = escrowBalances
-		walletMap["digitalAssetTypes"] = digitalAssetTypes
-		walletMap["createdAt"] = walletAsset.GetProp("createdAt")
-
-		updatedWallet, err := assets.NewAsset(walletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update wallet")
+		// Update wallet
+		walletUpdate := map[string]any{
+			"balances":          balances,
+			"escrowBalances":    escrowBalances,
+			"digitalAssetTypes": digitalAssetTypes,
 		}
 
-		_, err = updatedWallet.Put(stub)
+		_, err = walletAsset.Update(stub, walletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error updating wallet", err.Status())
 		}
 
 		// Update total supply
 		currentSupply := asset.GetProp("totalSupply").(float64)
-		assetMap := make(map[string]interface{})
-		assetMap["@assetType"] = "digitalAsset"
-		assetMap["@key"] = "digitalAsset:" + assetId
-		assetMap["name"] = asset.GetProp("name")
-		assetMap["symbol"] = asset.GetProp("symbol")
-		assetMap["decimals"] = asset.GetProp("decimals")
-		assetMap["totalSupply"] = currentSupply + amount
-		assetMap["owner"] = asset.GetProp("owner")
-		assetMap["issuedAt"] = asset.GetProp("issuedAt")
-		assetMap["issuerHash"] = asset.GetProp("issuerHash")
-
-		updatedAsset, err := assets.NewAsset(assetMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update asset")
+		assetUpdate := map[string]any{
+			"totalSupply": currentSupply + amount,
 		}
 
-		_, err = updatedAsset.Put(stub)
+		_, err = asset.Update(stub, assetUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error updating asset", err.Status())
 		}
 
-		response := map[string]interface{}{
+		response := map[string]any{
 			"message":     "Tokens minted successfully",
 			"assetId":     assetId,
 			"walletId":    walletUUID,
@@ -408,7 +386,7 @@ var TransferTokens = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		fromPubKey, _ := req["fromPubKey"].(string)
 		toPubKey, _ := req["toPubKey"].(string)
 		assetId, _ := req["assetId"].(string)
@@ -419,7 +397,7 @@ var TransferTokens = transactions.Transaction{
 		hash := sha256.Sum256([]byte(fromPubKey))
 		pubKeyHash := hex.EncodeToString(hash[:])
 
-		userDirKey, err := assets.NewKey(map[string]interface{}{
+		userDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": pubKeyHash,
 		})
@@ -449,7 +427,7 @@ var TransferTokens = transactions.Transaction{
 		hash = sha256.Sum256([]byte(toPubKey))
 		pubKeyHash = hex.EncodeToString(hash[:])
 
-		userDirKey, err = assets.NewKey(map[string]interface{}{
+		userDirKey, err = assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": pubKeyHash,
 		})
@@ -471,15 +449,15 @@ var TransferTokens = transactions.Transaction{
 		}
 
 		// Update source wallet balance
-		fromAssetTypes := fromWalletAsset.GetProp("digitalAssetTypes").([]interface{})
-		fromBalances := fromWalletAsset.GetProp("balances").([]interface{})
-		fromEscrowBalances := fromWalletAsset.GetProp("escrowBalances").([]interface{})
+		fromAssetTypes := fromWalletAsset.GetProp("digitalAssetTypes").([]any)
+		fromBalances := fromWalletAsset.GetProp("balances").([]any)
+		fromEscrowBalances := fromWalletAsset.GetProp("escrowBalances").([]any)
 
 		fromAssetFound := false
 		for i, assetRef := range fromAssetTypes {
 			var refAssetId string
 			switch ref := assetRef.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				refAssetId = strings.Split(ref["@key"].(string), ":")[1]
 			case string:
 				refAssetId = ref
@@ -501,15 +479,15 @@ var TransferTokens = transactions.Transaction{
 		}
 
 		// Update destination wallet balance
-		toAssetTypes := toWalletAsset.GetProp("digitalAssetTypes").([]interface{})
-		toBalances := toWalletAsset.GetProp("balances").([]interface{})
-		toEscrowBalances := toWalletAsset.GetProp("escrowBalances").([]interface{})
+		toAssetTypes := toWalletAsset.GetProp("digitalAssetTypes").([]any)
+		toBalances := toWalletAsset.GetProp("balances").([]any)
+		toEscrowBalances := toWalletAsset.GetProp("escrowBalances").([]any)
 
 		toAssetFound := false
 		for i, assetRef := range toAssetTypes {
 			var refAssetId string
 			switch ref := assetRef.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				refAssetId = strings.Split(ref["@key"].(string), ":")[1]
 			case string:
 				refAssetId = ref
@@ -523,9 +501,9 @@ var TransferTokens = transactions.Transaction{
 			}
 		}
 
-		// PPS: if asset not found, Add asset
+		// if asset not found, Add asset
 		if !toAssetFound {
-			toAssetTypes = append(toAssetTypes, map[string]interface{}{
+			toAssetTypes = append(toAssetTypes, map[string]any{
 				"@key": "digitalAsset:" + assetId,
 			})
 			toBalances = append(toBalances, amount)
@@ -533,50 +511,28 @@ var TransferTokens = transactions.Transaction{
 		}
 
 		// Save updated source wallet
-		fromWalletMap := make(map[string]interface{})
-		fromWalletMap["@assetType"] = "wallet"
-		fromWalletMap["@key"] = "wallet:" + fromWalletUUID
-		fromWalletMap["walletId"] = fromWalletAsset.GetProp("walletId")
-		fromWalletMap["ownerPubKey"] = fromWalletAsset.GetProp("ownerPubKey")
-		fromWalletMap["ownerCertHash"] = fromWalletAsset.GetProp("ownerCertHash")
-		fromWalletMap["balances"] = fromBalances
-		fromWalletMap["escrowBalances"] = fromEscrowBalances
-		fromWalletMap["digitalAssetTypes"] = fromAssetTypes
-		fromWalletMap["createdAt"] = fromWalletAsset.GetProp("createdAt")
-
-		updatedFromWallet, err := assets.NewAsset(fromWalletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update source wallet")
+		fromWalletUpdate := map[string]any{
+			"balances":          fromBalances,
+			"escrowBalances":    fromEscrowBalances,
+			"digitalAssetTypes": fromAssetTypes,
 		}
-
-		_, err = updatedFromWallet.Put(stub)
+		_, err = fromWalletAsset.Update(stub, fromWalletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error saving source wallet", err.Status())
 		}
 
 		// Save updated destination wallet
-		toWalletMap := make(map[string]interface{})
-		toWalletMap["@assetType"] = "wallet"
-		toWalletMap["@key"] = "wallet:" + toWalletUUID
-		toWalletMap["walletId"] = toWalletAsset.GetProp("walletId")
-		toWalletMap["ownerPubKey"] = toWalletAsset.GetProp("ownerPubKey")
-		toWalletMap["ownerCertHash"] = toWalletAsset.GetProp("ownerCertHash")
-		toWalletMap["balances"] = toBalances
-		toWalletMap["escrowBalances"] = toEscrowBalances
-		toWalletMap["digitalAssetTypes"] = toAssetTypes
-		toWalletMap["createdAt"] = toWalletAsset.GetProp("createdAt")
-
-		updatedToWallet, err := assets.NewAsset(toWalletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update destination wallet")
+		toWalletUpdate := map[string]any{
+			"balances":          toBalances,
+			"escrowBalances":    toEscrowBalances,
+			"digitalAssetTypes": toAssetTypes,
 		}
-
-		_, err = updatedToWallet.Put(stub)
+		_, err = toWalletAsset.Update(stub, toWalletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error saving destination wallet", err.Status())
 		}
 
-		response := map[string]interface{}{
+		response := map[string]any{
 			"message":      "Transfer completed successfully",
 			"fromWalletId": fromWalletUUID,
 			"toWalletId":   toWalletUUID,
@@ -640,7 +596,7 @@ var BurnTokens = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		assetId, _ := req["assetId"].(string)
 		pubKey, _ := req["pubKey"].(string)
 		amount, _ := req["amount"].(float64)
@@ -650,7 +606,7 @@ var BurnTokens = transactions.Transaction{
 		hash := sha256.Sum256([]byte(pubKey))
 		pubKeyHash := hex.EncodeToString(hash[:])
 
-		userDirKey, err := assets.NewKey(map[string]interface{}{
+		userDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": pubKeyHash,
 		})
@@ -682,15 +638,15 @@ var BurnTokens = transactions.Transaction{
 			return nil, errors.WrapErrorWithStatus(err, "Error reading wallet", err.Status())
 		}
 
-		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]interface{})
-		balances := walletAsset.GetProp("balances").([]interface{})
+		digitalAssetTypes := walletAsset.GetProp("digitalAssetTypes").([]any)
+		balances := walletAsset.GetProp("balances").([]any)
 
 		// Find asset index and update balance
 		assetFound := false
 		for i, assetRef := range digitalAssetTypes {
 			var refAssetId string
 			switch ref := assetRef.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				refAssetId = strings.Split(ref["@key"].(string), ":")[1]
 			case string:
 				refAssetId = ref
@@ -712,51 +668,26 @@ var BurnTokens = transactions.Transaction{
 		}
 
 		// Create updated wallet map
-		walletMap := make(map[string]interface{})
-		walletMap["@assetType"] = "wallet"
-		walletMap["@key"] = "wallet:" + walletUUID
-		walletMap["walletId"] = walletAsset.GetProp("walletId")
-		walletMap["ownerPubKey"] = walletAsset.GetProp("ownerPubKey")
-		walletMap["ownerCertHash"] = walletAsset.GetProp("ownerCertHash")
-		walletMap["balances"] = balances
-		walletMap["escrowBalances"] = walletAsset.GetProp("escrowBalances")
-		walletMap["digitalAssetTypes"] = digitalAssetTypes
-		walletMap["createdAt"] = walletAsset.GetProp("createdAt")
-
-		updatedWallet, err := assets.NewAsset(walletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update wallet")
+		walletUpdate := map[string]any{
+			"balances":          balances,
+			"digitalAssetTypes": digitalAssetTypes,
 		}
-
-		_, err = updatedWallet.Put(stub)
+		_, err = walletAsset.Update(stub, walletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error updating wallet", err.Status())
 		}
 
 		// Update total supply
 		currentSupply := asset.GetProp("totalSupply").(float64)
-		assetMap := make(map[string]interface{})
-		assetMap["@assetType"] = "digitalAsset"
-		assetMap["@key"] = "digitalAsset:" + assetId
-		assetMap["name"] = asset.GetProp("name")
-		assetMap["symbol"] = asset.GetProp("symbol")
-		assetMap["decimals"] = asset.GetProp("decimals")
-		assetMap["totalSupply"] = currentSupply - amount
-		assetMap["owner"] = asset.GetProp("owner")
-		assetMap["issuedAt"] = asset.GetProp("issuedAt")
-		assetMap["issuerHash"] = asset.GetProp("issuerHash")
-
-		updatedAsset, err := assets.NewAsset(assetMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update asset")
+		assetUpdate := map[string]any{
+			"totalSupply": currentSupply - amount,
 		}
-
-		_, err = updatedAsset.Put(stub)
+		_, err = asset.Update(stub, assetUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error updating asset", err.Status())
 		}
 
-		response := map[string]interface{}{
+		response := map[string]any{
 			"message":     "Tokens burned successfully",
 			"assetId":     assetId,
 			"walletId":    walletUUID,
