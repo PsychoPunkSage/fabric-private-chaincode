@@ -21,7 +21,6 @@ var (
 		transaction.CreateAndLockEscrow,
 		// Read
 		transaction.ReadUserDir,
-		transaction.ReadWallet,
 		transaction.ReadDigitalAsset,
 		transaction.ReadEscrow,
 		// misc
