@@ -261,13 +261,13 @@ show_user_dashboard() {
     echo -e "${CYAN}╠══════════════════════════════════════════════════════════════╣${NC}"
 
     # Show recent activity
-    echo -e "${CYAN}║${NC} ${YELLOW}Recent Activity:${NC}                                           ${CYAN}║${NC}"
+    echo -e "${CYAN}${NC} ${YELLOW}Recent Activity:${NC}                                           ${CYAN}${NC}"
     if [ -f "$ACTIVITY_LOG" ] && [ -s "$ACTIVITY_LOG" ]; then
         tail -n 3 "$ACTIVITY_LOG" | while IFS= read -r line; do
-            printf "${CYAN}║${NC} %-58s ${CYAN}║${NC}\n" "$line"
+            printf "${CYAN}${NC} %-58s ${CYAN}${NC}\n" "$line"
         done
     else
-        printf "${CYAN}║${NC} %-58s ${CYAN}║${NC}\n" "No activity yet"
+        printf "${CYAN}${NC} %-58s ${CYAN}${NC}\n" "No activity yet"
     fi
 }
 
@@ -588,22 +588,6 @@ transfer_tokens() {
         return 1
     fi
 
-    # # Save current state
-    # local my_wallet="$WALLET_UUID"
-    #
-    # # Load other user's wallet
-    # source "$other_user_state"
-    # local to_wallet="$WALLET_UUID"
-    #
-    # if [ -z "$to_wallet" ]; then
-    #     log_error "$other_user's wallet UUID not found!"
-    #     return 1
-    # fi
-    #
-    # # Reload our state
-    # source "${STATE_DIR}/${USER_MODE}.state"
-    # source "$SHARED_STATE"
-
     echo -n "Enter amount to transfer to $other_user: "
     read amount
 
@@ -713,12 +697,6 @@ create_escrow() {
     local escrow_id="${USER_MODE}-escrow-$(date +%s)"
     local buyer_wallet="$WALLET_UUID"
 
-    # source "$other_user_state"
-    # local seller_wallet="$WALLET_UUID"
-    #
-    # source "${STATE_DIR}/${USER_MODE}.state"
-    # source "$SHARED_STATE"
-
     local output
     if output=$(run_fpcclient "invoke" "createAndLockEscrow" "{
         \"escrowId\": \"$escrow_id\",
@@ -747,46 +725,6 @@ create_escrow() {
         return 1
     fi
 }
-
-# verify_escrow_condition() {
-#     load_state
-#
-#     if [ -z "$LAST_ESCROW_UUID" ]; then
-#         echo -n "Enter escrow UUID to verify: "
-#         read escrow_uuid
-#     else
-#         echo "Last escrow: ${LAST_ESCROW_UUID}"
-#         echo -n "Use this escrow? (y/n): "
-#         read use_last
-#
-#         if [ "$use_last" = "y" ] || [ "$use_last" = "Y" ]; then
-#             escrow_uuid="$LAST_ESCROW_UUID"
-#         else
-#             echo -n "Enter escrow UUID: "
-#             read escrow_uuid
-#         fi
-#     fi
-#
-#     echo -n "Enter secret: "
-#     read -s secret
-#     echo
-#
-#     echo -n "Enter parcel ID: "
-#     read parcel_id
-#
-#     local output
-#     if output=$(run_fpcclient "invoke" "verifyEscrowCondition" "{
-#         \"escrowId\": \"$escrow_uuid\",
-#         \"secret\": \"$secret\",
-#         \"parcelId\": \"$parcel_id\"
-#     }" "Verifying escrow condition"); then
-#         log_activity "$USER_NAME" "Verified escrow condition for ${escrow_uuid}"
-#         log_success "Escrow condition verified successfully!"
-#     else
-#         log_error "Failed to verify escrow condition"
-#         return 1
-#     fi
-# }
 
 release_escrow() {
     load_state
@@ -1271,7 +1209,23 @@ run_original_tests() {
     fi
 
     log_info "=== RUNNING ORIGINAL TEST SUITE ==="
+
+    # Check if enclave is initialized
+    local enclave_marker="/tmp/fpc_enclave_initialized"
+    local env_file="$FPC_PATH/samples/chaincode/confidential-escrow/.env"
+
+    if [ ! -f "$enclave_marker" ]; then
+        log_info "Enclave not initialized. Setting up docker environment..."
+        setup_docker "$env_file"
+        touch "$enclave_marker"
+        log_success "Docker environment initialized!"
+    else
+        log_info "Enclave already initialized, sourcing environment..."
+        source "$env_file"
+    fi
+
     run_tests
+
     log_success "Original tests completed!"
 }
 
