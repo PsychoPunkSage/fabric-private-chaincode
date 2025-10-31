@@ -30,16 +30,16 @@ var CreateAndLockEscrow = transactions.Transaction{
 		{Tag: "sellerPubKey", Label: "Seller Public Key", DataType: "string", Required: true},
 		{Tag: "amount", Label: "Escrowed Amount", DataType: "number", Required: true},
 		{Tag: "assetType", Label: "Asset Type Reference", DataType: "->digitalAsset", Required: true},
-		{Tag: "parcelId", Label: "Parcel ID", DataType: "string", Required: true}, // ADD THIS
+		{Tag: "parcelId", Label: "Parcel ID", DataType: "string", Required: true},
 		{Tag: "secret", Label: "Secret Key", DataType: "string", Required: true},
 		{Tag: "buyerCertHash", Label: "buyer Certificate Hash", DataType: "string", Required: true},
 	},
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		escrowId, _ := req["escrowId"].(string)
 		buyerPubKey, _ := req["buyerPubKey"].(string)
 		sellerPubKey, _ := req["sellerPubKey"].(string)
 		amount, _ := req["amount"].(float64)
-		assetType, _ := req["assetType"].(interface{})
+		assetType, _ := req["assetType"].(any)
 		parcelId, _ := req["parcelId"].(string)
 		secret, _ := req["secret"].(string)
 		buyerCertHash, _ := req["buyerCertHash"].(string)
@@ -74,7 +74,7 @@ var CreateAndLockEscrow = transactions.Transaction{
 		fmt.Printf("DEBUG: Seller PubKey: %s\n", sellerPubKey)
 		fmt.Printf("DEBUG: Seller PubKey Hash: %s\n", sellerPubKeyHash)
 
-		sellerUserDirKey, err := assets.NewKey(map[string]interface{}{
+		sellerUserDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": sellerPubKeyHash,
 		})
@@ -94,7 +94,7 @@ var CreateAndLockEscrow = transactions.Transaction{
 		hash = sha256.Sum256([]byte(buyerPubKey))
 		buyerPubKeyHash := hex.EncodeToString(hash[:])
 
-		buyerUserDirKey, err := assets.NewKey(map[string]interface{}{
+		buyerUserDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": buyerPubKeyHash,
 		})
@@ -120,14 +120,14 @@ var CreateAndLockEscrow = transactions.Transaction{
 		}
 
 		// 2. Get wallet balances
-		digitalAssetTypes := buyerWallet.GetProp("digitalAssetTypes").([]interface{})
-		balances := buyerWallet.GetProp("balances").([]interface{})
+		digitalAssetTypes := buyerWallet.GetProp("digitalAssetTypes").([]any)
+		balances := buyerWallet.GetProp("balances").([]any)
 
-		var escrowBalances []interface{}
+		var escrowBalances []any
 		if buyerWallet.GetProp("escrowBalances") != nil {
-			escrowBalances = buyerWallet.GetProp("escrowBalances").([]interface{})
+			escrowBalances = buyerWallet.GetProp("escrowBalances").([]any)
 		} else {
-			escrowBalances = make([]interface{}, len(balances))
+			escrowBalances = make([]any, len(balances))
 			for i := range escrowBalances {
 				escrowBalances[i] = 0.0
 			}
@@ -139,7 +139,7 @@ var CreateAndLockEscrow = transactions.Transaction{
 		for i, assetRef := range digitalAssetTypes {
 			var refAssetId string
 			switch ref := assetRef.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				refAssetId = strings.Split(ref["@key"].(string), ":")[1]
 			case string:
 				refAssetId = ref
@@ -168,23 +168,12 @@ var CreateAndLockEscrow = transactions.Transaction{
 		escrowBalances[assetIndex] = currentEscrowBalance + amount
 
 		// 5. Update wallet
-		walletMap := make(map[string]interface{})
-		walletMap["@assetType"] = "wallet"
-		walletMap["@key"] = "wallet:" + buyerWalletUUID
-		walletMap["walletId"] = buyerWallet.GetProp("walletId")
-		walletMap["ownerPubKey"] = buyerWallet.GetProp("ownerPubKey")
-		walletMap["ownerCertHash"] = buyerWallet.GetProp("ownerCertHash")
-		walletMap["balances"] = balances
-		walletMap["escrowBalances"] = escrowBalances
-		walletMap["digitalAssetTypes"] = digitalAssetTypes
-		walletMap["createdAt"] = buyerWallet.GetProp("createdAt")
-
-		updatedWallet, err := assets.NewAsset(walletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update wallet")
+		buyerWalletUpdate := map[string]any{
+			"balances":          balances,
+			"escrowBalances":    escrowBalances,
+			"digitalAssetTypes": digitalAssetTypes,
 		}
-
-		_, err = updatedWallet.Put(stub)
+		_, err = buyerWallet.Update(stub, buyerWalletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error saving updated wallet", err.Status())
 		}
@@ -195,7 +184,7 @@ var CreateAndLockEscrow = transactions.Transaction{
 		conditionValue := hex.EncodeToString(conditionHash[:])
 
 		// 6. Create escrow with "Active" status
-		escrowMap := make(map[string]interface{})
+		escrowMap := make(map[string]any)
 		escrowMap["@assetType"] = "escrow"
 		escrowMap["escrowId"] = escrowId
 		escrowMap["buyerPubKey"] = buyerPubKey
@@ -237,7 +226,7 @@ var VerifyEscrowCondition = transactions.Transaction{
 		{Tag: "secret", DataType: "string", Required: true},
 		{Tag: "parcelId", DataType: "string", Required: true},
 	},
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		escrowId, _ := req["escrowId"].(string)
 		secret, _ := req["secret"].(string)
 		parcelId, _ := req["parcelId"].(string)
@@ -269,32 +258,16 @@ var VerifyEscrowCondition = transactions.Transaction{
 		}
 
 		// 5. Update escrow status to "ReadyForRelease"
-		escrowMap := make(map[string]interface{})
-		escrowMap["@assetType"] = "escrow"
-		escrowMap["@key"] = "escrow:" + escrowId
-		escrowMap["escrowId"] = escrowAsset.GetProp("escrowId")
-		escrowMap["buyerPubKey"] = escrowAsset.GetProp("buyerPubKey")
-		escrowMap["sellerPubKey"] = escrowAsset.GetProp("sellerPubKey")
-		escrowMap["parcelId"] = escrowAsset.GetProp("parcelId")
-		escrowMap["amount"] = escrowAsset.GetProp("amount")
-		escrowMap["assetType"] = escrowAsset.GetProp("assetType")
-		escrowMap["conditionValue"] = escrowAsset.GetProp("conditionValue")
-		escrowMap["status"] = "ReadyForRelease" // Update status
-		escrowMap["createdAt"] = escrowAsset.GetProp("createdAt")
-		escrowMap["buyerCertHash"] = escrowAsset.GetProp("buyerCertHash")
-
-		updatedEscrow, err := assets.NewAsset(escrowMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update escrow")
+		escrowUpdate := map[string]any{
+			"status": "ReadyForRelease",
 		}
-
-		_, err = updatedEscrow.Put(stub)
+		_, err = escrowAsset.Update(stub, escrowUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Error saving updated escrow", err.Status())
 		}
 
 		// 6. Return success response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"message":      "Condition verified successfully",
 			"escrowId":     escrowId,
 			"status":       "ReadyForRelease",
@@ -326,7 +299,7 @@ var ReleaseEscrow = transactions.Transaction{
 		{Tag: "parcelId", DataType: "string", Required: true},
 		{Tag: "sellerCertHash", DataType: "string", Required: true},
 	},
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		escrowUUID, _ := req["escrowUUID"].(string)
 		secret, _ := req["secret"].(string)
 		parcelId, _ := req["parcelId"].(string)
@@ -381,23 +354,23 @@ var ReleaseEscrow = transactions.Transaction{
 		}
 
 		// Get asset info
-		assetType := escrowAsset.GetProp("assetType").(map[string]interface{})
+		assetType := escrowAsset.GetProp("assetType").(map[string]any)
 		assetId := strings.Split(assetType["@key"].(string), ":")[1]
 		amount := escrowAsset.GetProp("amount").(float64)
 
 		// Find asset index in both wallets
-		buyerAssets := buyerWallet.GetProp("digitalAssetTypes").([]interface{})
-		buyerBalances := buyerWallet.GetProp("balances").([]interface{})
-		buyerEscrowBalances := buyerWallet.GetProp("escrowBalances").([]interface{})
+		buyerAssets := buyerWallet.GetProp("digitalAssetTypes").([]any)
+		buyerBalances := buyerWallet.GetProp("balances").([]any)
+		buyerEscrowBalances := buyerWallet.GetProp("escrowBalances").([]any)
 
-		sellerAssets := sellerWallet.GetProp("digitalAssetTypes").([]interface{})
-		sellerBalances := sellerWallet.GetProp("balances").([]interface{})
+		sellerAssets := sellerWallet.GetProp("digitalAssetTypes").([]any)
+		sellerBalances := sellerWallet.GetProp("balances").([]any)
 
-		var sellerEscrowBalances []interface{}
+		var sellerEscrowBalances []any
 		if sellerWallet.GetProp("escrowBalances") != nil {
-			sellerEscrowBalances = sellerWallet.GetProp("escrowBalances").([]interface{})
+			sellerEscrowBalances = sellerWallet.GetProp("escrowBalances").([]any)
 		} else {
-			sellerEscrowBalances = make([]interface{}, len(sellerBalances))
+			sellerEscrowBalances = make([]any, len(sellerBalances))
 			for i := range sellerEscrowBalances {
 				sellerEscrowBalances[i] = 0.0
 			}
@@ -407,7 +380,7 @@ var ReleaseEscrow = transactions.Transaction{
 
 		// Find buyer asset index
 		for i, assetRef := range buyerAssets {
-			refAssetId := strings.Split(assetRef.(map[string]interface{})["@key"].(string), ":")[1]
+			refAssetId := strings.Split(assetRef.(map[string]any)["@key"].(string), ":")[1]
 			if refAssetId == assetId {
 				buyerAssetIndex = i
 				break
@@ -416,16 +389,12 @@ var ReleaseEscrow = transactions.Transaction{
 
 		// Find seller asset index
 		for i, assetRef := range sellerAssets {
-			refAssetId := strings.Split(assetRef.(map[string]interface{})["@key"].(string), ":")[1]
+			refAssetId := strings.Split(assetRef.(map[string]any)["@key"].(string), ":")[1]
 			if refAssetId == assetId {
 				sellerAssetIndex = i
 				break
 			}
 		}
-
-		// if buyerAssetIndex == -1 || sellerAssetIndex == -1 {
-		// 	return nil, errors.NewCCError("Asset not found in wallets", 404)
-		// }
 
 		if sellerAssetIndex == -1 {
 			sellerAssets = append(sellerAssets, assetType)
@@ -439,75 +408,37 @@ var ReleaseEscrow = transactions.Transaction{
 		sellerBalances[sellerAssetIndex] = sellerBalances[sellerAssetIndex].(float64) + amount
 
 		// Update buyer wallet
-		buyerWalletMap := make(map[string]interface{})
-		buyerWalletMap["@assetType"] = "wallet"
-		buyerWalletMap["@key"] = "wallet:" + buyerWalletId
-		buyerWalletMap["walletId"] = buyerWallet.GetProp("walletId")
-		buyerWalletMap["ownerPubKey"] = buyerWallet.GetProp("ownerPubKey")
-		buyerWalletMap["ownerCertHash"] = buyerWallet.GetProp("ownerCertHash")
-		buyerWalletMap["balances"] = buyerBalances
-		buyerWalletMap["escrowBalances"] = buyerEscrowBalances
-		buyerWalletMap["digitalAssetTypes"] = buyerAssets
-		buyerWalletMap["createdAt"] = buyerWallet.GetProp("createdAt")
-
-		updatedBuyerWallet, err := assets.NewAsset(buyerWalletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update buyer wallet")
+		walletUpdate := map[string]any{
+			"balances":          buyerBalances,
+			"escrowBalances":    buyerEscrowBalances,
+			"digitalAssetTypes": buyerAssets,
 		}
-		_, err = updatedBuyerWallet.Put(stub)
+		_, err = buyerWallet.Update(stub, walletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Failed to save buyer wallet", err.Status())
 		}
 
 		// Update seller wallet
-		sellerWalletMap := make(map[string]interface{})
-		sellerWalletMap["@assetType"] = "wallet"
-		sellerWalletMap["@key"] = "wallet:" + sellerWalletId
-		sellerWalletMap["walletId"] = sellerWallet.GetProp("walletId")
-		sellerWalletMap["ownerPubKey"] = sellerWallet.GetProp("ownerPubKey")
-		sellerWalletMap["ownerCertHash"] = sellerWallet.GetProp("ownerCertHash")
-		sellerWalletMap["balances"] = sellerBalances
-		sellerWalletMap["escrowBalances"] = sellerEscrowBalances
-		// sellerWalletMap["escrowBalances"] = sellerWallet.GetProp("escrowBalances")
-		sellerWalletMap["digitalAssetTypes"] = sellerAssets
-		sellerWalletMap["createdAt"] = sellerWallet.GetProp("createdAt")
-
-		updatedSellerWallet, err := assets.NewAsset(sellerWalletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update seller wallet")
+		walletUpdate = map[string]any{
+			"balances":          sellerBalances,
+			"escrowBalances":    sellerEscrowBalances,
+			"digitalAssetTypes": sellerAssets,
 		}
-		_, err = updatedSellerWallet.Put(stub)
+		_, err = sellerWallet.Update(stub, walletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Failed to save seller wallet", err.Status())
 		}
 
 		// Update escrow status to Released
-		escrowMap := make(map[string]interface{})
-		escrowMap["@assetType"] = "escrow"
-		escrowMap["@key"] = "escrow:" + escrowUUID
-		escrowMap["escrowId"] = escrowAsset.GetProp("escrowId")
-		escrowMap["buyerPubKey"] = escrowAsset.GetProp("buyerPubKey")
-		escrowMap["sellerPubKey"] = escrowAsset.GetProp("sellerPubKey")
-		escrowMap["buyerWalletUUID"] = buyerWalletId
-		escrowMap["sellerWalletUUID"] = sellerWalletId
-		escrowMap["amount"] = amount
-		escrowMap["assetType"] = assetType
-		escrowMap["parcelId"] = parcelId
-		escrowMap["conditionValue"] = storedCondition
-		escrowMap["status"] = "Released"
-		escrowMap["createdAt"] = escrowAsset.GetProp("createdAt")
-		escrowMap["buyerCertHash"] = escrowAsset.GetProp("buyerCertHash")
-
-		updatedEscrow, err := assets.NewAsset(escrowMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update escrow")
+		escrowUpdate := map[string]any{
+			"status": "Released",
 		}
-		_, err = updatedEscrow.Put(stub)
+		_, err = escrowAsset.Update(stub, escrowUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Failed to save escrow", err.Status())
 		}
 
-		response := map[string]interface{}{
+		response := map[string]any{
 			"message":        "Escrow released successfully",
 			"escrowId":       escrowUUID,
 			"amount":         amount,
@@ -534,7 +465,7 @@ var RefundEscrow = transactions.Transaction{
 		{Tag: "buyerPubKey", DataType: "string", Required: true},
 		{Tag: "buyerCertHash", DataType: "string", Required: true},
 	},
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		escrowUUID, _ := req["escrowUUID"].(string)
 		// buyerWalletUUID, _ := req["buyerWalletUUID"].(string)
 		buyerPubKey, _ := req["buyerPubKey"].(string)
@@ -551,7 +482,7 @@ var RefundEscrow = transactions.Transaction{
 		hash := sha256.Sum256([]byte(buyerPubKey))
 		buyerPubKeyHash := hex.EncodeToString(hash[:])
 
-		buyerUserDirKey, err := assets.NewKey(map[string]interface{}{
+		buyerUserDirKey, err := assets.NewKey(map[string]any{
 			"@assetType":    "userdir",
 			"publicKeyHash": buyerPubKeyHash,
 		})
@@ -580,18 +511,18 @@ var RefundEscrow = transactions.Transaction{
 		}
 
 		// Get asset info
-		assetType := escrowAsset.GetProp("assetType").(map[string]interface{})
+		assetType := escrowAsset.GetProp("assetType").(map[string]any)
 		assetId := strings.Split(assetType["@key"].(string), ":")[1]
 		amount := escrowAsset.GetProp("amount").(float64)
 
 		// Find asset index
-		buyerAssets := buyerWallet.GetProp("digitalAssetTypes").([]interface{})
-		buyerBalances := buyerWallet.GetProp("balances").([]interface{})
-		buyerEscrowBalances := buyerWallet.GetProp("escrowBalances").([]interface{})
+		buyerAssets := buyerWallet.GetProp("digitalAssetTypes").([]any)
+		buyerBalances := buyerWallet.GetProp("balances").([]any)
+		buyerEscrowBalances := buyerWallet.GetProp("escrowBalances").([]any)
 
 		var buyerAssetIndex int = -1
 		for i, assetRef := range buyerAssets {
-			refAssetId := strings.Split(assetRef.(map[string]interface{})["@key"].(string), ":")[1]
+			refAssetId := strings.Split(assetRef.(map[string]any)["@key"].(string), ":")[1]
 			if refAssetId == assetId {
 				buyerAssetIndex = i
 				break
@@ -607,53 +538,26 @@ var RefundEscrow = transactions.Transaction{
 		buyerBalances[buyerAssetIndex] = buyerBalances[buyerAssetIndex].(float64) + amount
 
 		// Update buyer wallet
-		buyerWalletMap := make(map[string]interface{})
-		buyerWalletMap["@assetType"] = "wallet"
-		buyerWalletMap["@key"] = "wallet:" + buyerWalletUUID
-		buyerWalletMap["walletId"] = buyerWallet.GetProp("walletId")
-		buyerWalletMap["ownerPubKey"] = buyerWallet.GetProp("ownerPubKey")
-		buyerWalletMap["ownerCertHash"] = buyerWallet.GetProp("ownerCertHash")
-		buyerWalletMap["balances"] = buyerBalances
-		buyerWalletMap["escrowBalances"] = buyerEscrowBalances
-		buyerWalletMap["digitalAssetTypes"] = buyerAssets
-		buyerWalletMap["createdAt"] = buyerWallet.GetProp("createdAt")
-
-		updatedBuyerWallet, err := assets.NewAsset(buyerWalletMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update buyer wallet")
+		walletUpdate := map[string]any{
+			"balances":          buyerBalances,
+			"escrowBalances":    buyerEscrowBalances,
+			"digitalAssetTypes": buyerAssets,
 		}
-		_, err = updatedBuyerWallet.Put(stub)
+		_, err = buyerWallet.Update(stub, walletUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Failed to save buyer wallet", err.Status())
 		}
 
 		// Update escrow status to Refunded
-		escrowMap := make(map[string]interface{})
-		escrowMap["@assetType"] = "escrow"
-		escrowMap["@key"] = "escrow:" + escrowUUID
-		escrowMap["escrowId"] = escrowAsset.GetProp("escrowId")
-		escrowMap["buyerPubKey"] = escrowAsset.GetProp("buyerPubKey")
-		escrowMap["sellerPubKey"] = escrowAsset.GetProp("sellerPubKey")
-		escrowMap["buyerWalletUUID"] = buyerWalletUUID
-		escrowMap["sellerWalletUUID"] = escrowAsset.GetProp("sellerWalletUUID")
-		escrowMap["amount"] = amount
-		escrowMap["assetType"] = assetType
-		escrowMap["parcelId"] = escrowAsset.GetProp("parcelId")
-		escrowMap["conditionValue"] = escrowAsset.GetProp("conditionValue")
-		escrowMap["status"] = "Refunded"
-		escrowMap["createdAt"] = escrowAsset.GetProp("createdAt")
-		escrowMap["buyerCertHash"] = buyerCertHash
-
-		updatedEscrow, err := assets.NewAsset(escrowMap)
-		if err != nil {
-			return nil, errors.WrapError(err, "Failed to update escrow")
+		escrowUpdate := map[string]any{
+			"status": "Refunded",
 		}
-		_, err = updatedEscrow.Put(stub)
+		_, err = escrowAsset.Update(stub, escrowUpdate)
 		if err != nil {
 			return nil, errors.WrapErrorWithStatus(err, "Failed to save escrow", err.Status())
 		}
 
-		response := map[string]interface{}{
+		response := map[string]any{
 			"message":         "Escrow refunded successfully",
 			"escrowUUID":      escrowUUID,
 			"amount":          amount,
@@ -682,7 +586,6 @@ var ReadEscrow = transactions.Transaction{
 	},
 
 	Args: []transactions.Argument{
-		// PPS: Cross-check method is needed...
 		{
 			Tag:         "uuid",
 			Label:       "UUID",
@@ -692,7 +595,7 @@ var ReadEscrow = transactions.Transaction{
 		},
 	},
 
-	Routine: func(stub *sw.StubWrapper, req map[string]interface{}) ([]byte, errors.ICCError) {
+	Routine: func(stub *sw.StubWrapper, req map[string]any) ([]byte, errors.ICCError) {
 		uuid, _ := req["uuid"].(string)
 
 		key := assets.Key{
