@@ -1,3 +1,6 @@
+// This file implements UserDirectory operations for mapping public key hashes to wallet UUIDs.
+// The directory provides a privacy-preserving lookup mechanism enabling wallet discovery
+// without exposing actual public keys on the ledger.
 package transactions
 
 import (
@@ -12,6 +15,20 @@ import (
 	"github.com/hyperledger-labs/cc-tools/transactions"
 )
 
+// CreateUserDir registers a new user directory entry linking a public key hash to a wallet.
+// This entry is created automatically during wallet creation but can also be invoked
+// independently for manual directory management.
+//
+// Arguments:
+//   - publicKeyHash: SHA-256 hash of the user's public key
+//   - walletUUID: UUID of the associated wallet
+//   - certHash: Certificate hash of the wallet owner
+//
+// Returns:
+//   - JSON representation of the created directory entry
+//   - Error if entry creation or persistence fails
+//
+// Note: The publicKeyHash serves as the primary key, ensuring one wallet per public key hash.
 var CreateUserDir = transactions.Transaction{
 	Tag:         "createUserDir",
 	Label:       "User Directory Creation",
@@ -85,6 +102,20 @@ var CreateUserDir = transactions.Transaction{
 	},
 }
 
+// ReadUserDir retrieves a user directory entry with ownership verification.
+// This operation requires the caller to provide a valid certificate hash,
+// preventing unauthorized directory lookups.
+//
+// Arguments:
+//   - userDir: Reference to the user directory entry (by publicKeyHash)
+//   - certHash: Certificate hash for ownership verification
+//
+// Returns:
+//   - JSON representation of the directory entry including wallet UUID
+//   - Error if entry not found or certificate hash mismatch
+//
+// Security: Certificate verification prevents enumeration attacks where an
+// adversary attempts to map all public keys to wallets.
 var ReadUserDir = transactions.Transaction{
 	Tag:         "readUserDir",
 	Label:       "Read User Directory",

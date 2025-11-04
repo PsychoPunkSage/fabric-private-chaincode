@@ -1,3 +1,6 @@
+// This file implements transaction handlers for digital asset token lifecycle management.
+// It provides operations for creating, reading, minting, transferring, and burning
+// confidential digital tokens with issuer-controlled supply management.
 package transactions
 
 import (
@@ -16,6 +19,24 @@ import (
 	"github.com/hyperledger-labs/cc-tools/transactions"
 )
 
+// CreateDigitalAsset initializes a new digital asset token type with fixed parameters.
+// Only authorized administrators from Org1MSP or Org2MSP can create new token types.
+// The issuer's certificate hash is stored for subsequent authorization of mint/burn operations.
+//
+// Arguments:
+//   - name: Human-readable token name (e.g., "US Dollar Token")
+//   - symbol: Unique token identifier (e.g., "USDT")
+//   - decimals: Number of decimal places for token precision
+//   - totalSupply: Initial total supply of tokens
+//   - owner: Identity of the token creator
+//   - issuedAt: (Optional) Timestamp of token creation, defaults to current time
+//   - issuerHash: Certificate hash of the issuer for access control
+//
+// Returns:
+//   - JSON representation of the created digital asset
+//   - Error if asset creation or blockchain persistence fails
+//
+// Security: Only the entity with matching issuerHash can mint or burn these tokens.
 var CreateDigitalAsset = transactions.Transaction{
 	Tag:         "createDigitalAsset",
 	Label:       "Digital Asset Creation",
@@ -127,6 +148,17 @@ var CreateDigitalAsset = transactions.Transaction{
 	},
 }
 
+// ReadDigitalAsset retrieves a digital asset token by its unique identifier.
+// This operation is read-only and does not modify ledger state.
+//
+// Arguments:
+//   - uuid: Unique identifier of the digital asset to retrieve
+//
+// Returns:
+//   - JSON representation of the digital asset
+//   - Error if asset not found or retrieval fails
+//
+// Note: Consider implementing symbol-based lookup for improved user experience.
 var ReadDigitalAsset = transactions.Transaction{
 	Tag:         "readDigitalAsset",
 	Label:       "Read Digital Asset",
@@ -173,6 +205,27 @@ var ReadDigitalAsset = transactions.Transaction{
 	},
 }
 
+// MintTokens creates new token units and adds them to a specified wallet.
+// This operation increases both the wallet balance and the token's total supply.
+// Only the original issuer (verified by certificate hash) can mint new tokens.
+//
+// Arguments:
+//   - assetId: UUID of the digital asset token type
+//   - pubKey: Public key of the recipient wallet owner
+//   - amount: Number of tokens to mint
+//   - issuerCertHash: Certificate hash of the issuer for authorization
+//
+// Process Flow:
+//  1. Resolve wallet UUID from public key hash via UserDirectory
+//  2. Verify issuer authorization against stored issuerHash
+//  3. Update or initialize wallet balance for the asset type
+//  4. Increment the token's total supply
+//
+// Returns:
+//   - JSON response with minting details and updated total supply
+//   - Error if authorization fails, wallet not found, or update fails
+//
+// Security: Unauthorized minting attempts are rejected with 403 status.
 var MintTokens = transactions.Transaction{
 	Tag:         "mintTokens",
 	Label:       "Mint Tokens",
@@ -332,6 +385,30 @@ var MintTokens = transactions.Transaction{
 	},
 }
 
+// TransferTokens moves tokens between two wallets with balance validation.
+// This operation atomically decrements the source wallet and increments the destination wallet.
+// The sender must provide a valid certificate hash matching the source wallet owner.
+//
+// Arguments:
+//   - fromPubKey: Public key of the sender wallet
+//   - toPubKey: Public key of the recipient wallet
+//   - assetId: UUID of the digital asset to transfer
+//   - amount: Number of tokens to transfer
+//   - senderCertHash: Certificate hash of the sender for authorization
+//
+// Process Flow:
+//  1. Resolve both wallet UUIDs from public key hashes
+//  2. Verify sender authorization
+//  3. Validate sufficient available balance (not escrowed)
+//  4. Deduct from source wallet
+//  5. Add to destination wallet (initialize asset entry if needed)
+//  6. Atomically commit both updates
+//
+// Returns:
+//   - JSON response with transfer confirmation details
+//   - Error if insufficient balance, authorization fails, or wallets not found
+//
+// Security: Only the wallet owner can initiate transfers from their wallet.
 var TransferTokens = transactions.Transaction{
 	Tag:         "transferTokens",
 	Label:       "Transfer Tokens",
@@ -549,6 +626,28 @@ var TransferTokens = transactions.Transaction{
 	},
 }
 
+// BurnTokens permanently removes tokens from circulation.
+// This operation decreases both the wallet balance and the token's total supply.
+// Only the original issuer can burn tokens, regardless of which wallet holds them.
+//
+// Arguments:
+//   - assetId: UUID of the digital asset token type
+//   - pubKey: Public key of the wallet from which to burn tokens
+//   - amount: Number of tokens to burn
+//   - issuerCertHash: Certificate hash of the issuer for authorization
+//
+// Process Flow:
+//  1. Resolve wallet UUID from public key hash
+//  2. Verify issuer authorization
+//  3. Validate sufficient balance in target wallet
+//  4. Deduct tokens from wallet balance
+//  5. Decrement the token's total supply
+//
+// Returns:
+//   - JSON response with burn details and updated total supply
+//   - Error if insufficient balance, authorization fails, or asset not found
+//
+// Security: Only the token issuer can burn tokens. Wallet owners cannot burn their own tokens.
 var BurnTokens = transactions.Transaction{
 	Tag:         "burnTokens",
 	Label:       "Burn Tokens",

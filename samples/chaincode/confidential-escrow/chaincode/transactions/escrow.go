@@ -1,3 +1,6 @@
+// This file implements programmable escrow contract operations for conditional payments.
+// It provides secure, trustless fund transfers where tokens are locked until predefined
+// cryptographic conditions are met, enabling atomic delivery-versus-payment scenarios.
 package transactions
 
 import (
@@ -15,6 +18,34 @@ import (
 	"github.com/hyperledger-labs/cc-tools/transactions"
 )
 
+// CreateAndLockEscrow creates a new escrow contract and immediately locks funds.
+// This atomic operation moves tokens from the buyer's available balance to their
+// escrow balance, preventing double-spending while the escrow is active.
+//
+// Arguments:
+//   - escrowId: Unique identifier for the escrow contract
+//   - buyerPubKey: Public key of the buyer (fund provider)
+//   - sellerPubKey: Public key of the seller (fund recipient upon release)
+//   - amount: Number of tokens to lock in escrow
+//   - assetType: Reference to the digital asset token type
+//   - parcelId: Identifier for the real-world asset or service being purchased
+//   - secret: Secret value known only to buyer and seller
+//   - buyerCertHash: Certificate hash of the buyer for authorization
+//
+// Process Flow:
+//  1. Validate both buyer and seller wallets exist
+//  2. Verify buyer authorization via certificate hash
+//  3. Check buyer has sufficient available balance
+//  4. Move tokens from available balance to escrow balance
+//  5. Compute condition hash: SHA256(secret + parcelId)
+//  6. Create escrow asset with "Active" status
+//
+// Returns:
+//   - JSON representation of the created escrow contract
+//   - Error if insufficient balance, authorization fails, or wallets not found
+//
+// Security: Funds are cryptographically locked until the correct secret and parcelId
+// combination is provided, ensuring atomic settlement.
 var CreateAndLockEscrow = transactions.Transaction{
 	Tag:         "createAndLockEscrow",
 	Label:       "Create and Lock Escrow",
@@ -218,7 +249,28 @@ var CreateAndLockEscrow = transactions.Transaction{
 	},
 }
 
-// Add VerifyEscrowCondition transaction
+// VerifyEscrowCondition validates that the release condition for an escrow has been met.
+// This operation verifies the cryptographic proof (secret + parcelId hash) and updates
+// the escrow status to "ReadyForRelease" without actually transferring funds.
+//
+// Arguments:
+//   - escrowId: UUID of the escrow contract to verify
+//   - secret: Secret value to verify
+//   - parcelId: Parcel identifier to verify
+//
+// Process Flow:
+//  1. Retrieve escrow contract from ledger
+//  2. Verify escrow status is "Active"
+//  3. Compute SHA256(secret + parcelId)
+//  4. Compare computed hash with stored conditionValue
+//  5. Update escrow status to "ReadyForRelease" if match
+//
+// Returns:
+//   - JSON response with verification status and computed hash
+//   - Error if condition verification fails or escrow not active
+//
+// Note: This is a read-mostly operation that validates conditions before fund release.
+// Separating verification from release enables multi-step approval workflows.
 var VerifyEscrowCondition = transactions.Transaction{
 	Tag: "verifyEscrowCondition",
 	Args: []transactions.Argument{
@@ -284,6 +336,31 @@ var VerifyEscrowCondition = transactions.Transaction{
 	},
 }
 
+// ReleaseEscrow transfers escrowed funds from buyer to seller upon condition verification.
+// The seller must provide the correct secret and parcelId to prove condition fulfillment.
+// This operation atomically moves tokens from buyer's escrow balance to seller's available balance.
+//
+// Arguments:
+//   - escrowUUID: UUID of the escrow contract to release
+//   - secret: Secret value proving condition fulfillment
+//   - parcelId: Parcel identifier proving condition fulfillment
+//   - sellerCertHash: Certificate hash of the seller for authorization
+//
+// Process Flow:
+//  1. Retrieve escrow contract and verify "Active" status
+//  2. Verify parcelId matches escrow record
+//  3. Validate secret by computing SHA256(secret + parcelId)
+//  4. Verify seller authorization via certificate hash
+//  5. Deduct from buyer's escrow balance
+//  6. Add to seller's available balance (initialize if needed)
+//  7. Update escrow status to "Released"
+//
+// Returns:
+//   - JSON response confirming successful release
+//   - Error if verification fails, authorization fails, or wallets not found
+//
+// Security: Only the seller with correct secret/parcelId can release funds.
+// The buyer cannot prevent release once conditions are met.
 var ReleaseEscrow = transactions.Transaction{
 	Tag:         "releaseEscrow",
 	Label:       "Release Escrow",
@@ -450,6 +527,28 @@ var ReleaseEscrow = transactions.Transaction{
 	},
 }
 
+// RefundEscrow returns escrowed funds to the buyer if conditions are not met.
+// Only the buyer can initiate a refund, and only for active escrows.
+// This operation moves tokens from buyer's escrow balance back to available balance.
+//
+// Arguments:
+//   - escrowUUID: UUID of the escrow contract to refund
+//   - buyerPubKey: Public key of the buyer for wallet lookup
+//   - buyerCertHash: Certificate hash of the buyer for authorization
+//
+// Process Flow:
+//  1. Retrieve escrow contract and verify "Active" status
+//  2. Resolve buyer wallet from public key hash
+//  3. Verify buyer authorization via certificate hash
+//  4. Move tokens from escrow balance back to available balance
+//  5. Update escrow status to "Refunded"
+//
+// Returns:
+//   - JSON response confirming successful refund
+//   - Error if escrow not active, authorization fails, or wallet not found
+//
+// Note: Refunds are only available for active escrows. Once released or already refunded,
+// the operation is rejected. Consider implementing time-locked refunds for enhanced security.
 var RefundEscrow = transactions.Transaction{
 	Tag:         "refundEscrow",
 	Label:       "Refund Escrow",
@@ -569,6 +668,21 @@ var RefundEscrow = transactions.Transaction{
 	},
 }
 
+// ReadEscrow retrieves an escrow contract by its unique identifier.
+// This read-only operation returns the complete escrow state including status,
+// parties involved, locked amount, and condition details.
+//
+// Arguments:
+//   - uuid: Unique identifier of the escrow contract
+//
+// Returns:
+//   - JSON representation of the escrow contract
+//   - Error if escrow not found or retrieval fails
+//
+// Use Cases:
+//   - Verify escrow status before attempting release or refund
+//   - Audit escrow contract terms and parties
+//   - Track escrow lifecycle in external systems
 var ReadEscrow = transactions.Transaction{
 	Tag:         "readEscrow",
 	Label:       "Read Escrow",
