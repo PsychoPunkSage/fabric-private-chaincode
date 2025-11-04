@@ -4,6 +4,11 @@ import (
 	"github.com/hyperledger-labs/cc-tools/assets"
 )
 
+// DigitalAssetToken defines the asset type for fungible digital tokens.
+// This represents confidential digital currencies such as Central Bank Digital Currencies (CBDC)
+// or tokenized assets. Each token type has a fixed supply controlled by the issuer.
+//
+// Security: The issuerHash ensures only authorized entities can mint/burn tokens.
 var DigitalAssetToken = assets.AssetType{
 	Tag:         "digitalAsset",
 	Label:       "Digital Asset Token",

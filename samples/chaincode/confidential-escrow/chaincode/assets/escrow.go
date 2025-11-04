@@ -4,6 +4,21 @@ import (
 	"github.com/hyperledger-labs/cc-tools/assets"
 )
 
+// Escrow defines the asset type for programmable conditional payment contracts.
+// This enables secure, trustless transactions where funds are held in escrow until
+// predefined conditions are met. The escrow uses cryptographic hash verification
+// to ensure condition fulfillment.
+//
+// Lifecycle States:
+//   - Active: Funds locked, awaiting condition verification
+//   - ReadyForRelease: Condition verified, awaiting release
+//   - Released: Funds transferred to seller
+//   - Refunded: Funds returned to buyer
+//
+// Security Model:
+//   - conditionValue: SHA-256 hash of (secret + parcelId) for atomic condition verification
+//   - buyerCertHash: Ensures only the buyer can initiate refunds
+//   - Seller must provide correct secret and parcelId to release funds
 var Escrow = assets.AssetType{
 	Tag:         "escrow",
 	Label:       "Programmable Escrow",
