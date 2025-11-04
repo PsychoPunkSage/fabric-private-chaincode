@@ -2,7 +2,6 @@ package chaincode
 
 import (
 	"github.com/hyperledger-labs/cc-tools/assets"
-	"github.com/hyperledger-labs/cc-tools/events"
 	tx "github.com/hyperledger-labs/cc-tools/transactions"
 
 	asset "github.com/hyperledger/fabric-private-chaincode/samples/chaincode/confidential-escrow/chaincode/assets"
@@ -10,8 +9,14 @@ import (
 	transaction "github.com/hyperledger/fabric-private-chaincode/samples/chaincode/confidential-escrow/chaincode/transactions"
 )
 
-// Transaction and asset lists
 var (
+	// TxList defines all transaction handlers available in the chaincode.
+	// Transactions are grouped by functionality:
+	//   - Create operations: Initialize new assets (wallets, tokens, escrows)
+	//   - Read operations: Query existing assets
+	//   - Balance operations: Query and verify account balances
+	//   - Token operations: Mint, transfer, and burn digital assets
+	//   - Escrow operations: Manage conditional fund transfers
 	TxList = []tx.Transaction{
 		transaction.DebugTest,
 		// Create
@@ -35,16 +40,28 @@ var (
 		transaction.VerifyEscrowCondition,
 		transaction.ReleaseEscrow,
 	}
+
+	// AssetTypeList defines all asset types managed by the chaincode.
+	// Each asset type represents a core data structure:
+	//   - Wallet: User accounts holding digital assets
+	//   - DigitalAssetToken: Fungible tokens (e.g., CBDC)
+	//   - UserDirectory: Mapping between public keys and wallets
+	//   - Escrow: Conditional payment contracts
 	AssetTypeList = []assets.AssetType{
 		asset.Wallet,
 		asset.DigitalAssetToken,
 		asset.UserDirectory,
 		asset.Escrow,
 	}
-	EventTypeList = []events.Event{} // Empty for now
 )
 
-// SetupCC initializes the chaincode with assets and transactions
+// SetupCC initializes the chaincode with all necessary components.
+// This function configures the chaincode header metadata and registers
+// all transaction handlers, asset types, and event definitions with cc-tools.
+//
+// Returns:
+//
+//	error: Error if initialization fails, nil on success
 func SetupCC() error {
 	// Initialize header info
 	tx.InitHeader(tx.Header{
@@ -57,7 +74,6 @@ func SetupCC() error {
 	// Initialize transaction and asset lists
 	tx.InitTxList(TxList)
 	assets.InitAssetList(AssetTypeList)
-	events.InitEventList(EventTypeList)
 
 	return nil
 }
