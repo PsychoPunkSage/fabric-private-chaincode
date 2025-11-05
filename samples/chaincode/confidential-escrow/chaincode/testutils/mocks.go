@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	sw "github.com/hyperledger-labs/cc-tools/stubwrapper"
 	"github.com/hyperledger/fabric-chaincode-go/shim"
 	"github.com/hyperledger/fabric-protos-go/ledger/queryresult"
+	"github.com/hyperledger/fabric-protos-go/msp"
 	"github.com/hyperledger/fabric-protos-go/peer"
 )
 
@@ -25,12 +27,34 @@ type MockStub struct {
 
 // NewMockStub creates a new mock stub with initialized state
 func NewMockStub() *MockStub {
+	mockCert := `-----BEGIN CERTIFICATE-----
+MIICGjCCAcCgAwIBAgIRAIQkbh9nsGnLmDalAVlj8sUwCgYIKoZIzj0EAwIwczEL
+MAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG
+cmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh
+Lm9yZzEuZXhhbXBsZS5jb20wHhcNMjEwMTAxMDAwMDAwWhcNMzEwMTAxMDAwMDAw
+WjBbMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN
+U2FuIEZyYW5jaXNjbzEfMB0GA1UEAwwWVXNlcjFAb3JnMS5leGFtcGxlLmNvbTBZ
+MBMGByqGSM49AgEGCCqGSM49AwEHA0IABNDopAa0BX6z/jt0+Bm6FEr4VFRj0Lit
+jHu6I0v4QjLPqUKLLkqUh9TV6qUvEkYzPLfqkBgPKkLvMjLlH+wkH2+jTTBLMA4G
+A1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1UdIwQkMCKAIKfUfvpKXF7Y
+GYCfKLLqJBqhVvYlgaGQHkZQ8gFaZmB8MAoGCCqGSM49BAMCA0gAMEUCIQCxiLcW
+wGKvPpLYZxFWCXqjVgslxkXnAZf3JVFC8tQ7NAIgXx3LxA3r4+7VRaMjGhRZQzVl
+5lwVdQPjQoaFnhDWGe0=
+-----END CERTIFICATE-----`
+	// Create a mock serialized identity that cc-tools can parse
+	mockIdentity := &msp.SerializedIdentity{
+		Mspid:   "Org1MSP", // Match the Callers in your transactions
+		IdBytes: []byte(mockCert),
+	}
+
+	creatorBytes, _ := proto.Marshal(mockIdentity)
+
 	return &MockStub{
 		State:        make(map[string][]byte),
 		TransientMap: make(map[string][]byte),
 		TxID:         "mock-tx-id",
 		ChannelID:    "mock-channel",
-		Creator:      []byte("PsychoPunkSage"),
+		Creator:      creatorBytes,
 		Invocations:  []string{},
 	}
 }

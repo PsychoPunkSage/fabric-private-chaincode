@@ -73,16 +73,16 @@ func NewTestFixtures() *TestFixtures {
 // walletID is the user-provided nickname
 // walletUUID is the cc-tools generated unique identifier
 func (f *TestFixtures) CreateMockWallet(mockStub *MockStub, pubKey, certHash, walletID, walletUUID string, assetID string, balance, escrowBalance float64) error {
-	walletMap := map[string]interface{}{
+	walletMap := map[string]any{
 		"@assetType":     "wallet",
 		"@key":           "wallet:" + walletUUID, // CC-tools composite key
 		"walletId":       walletID,               // User-provided nickname
 		"ownerPubKey":    pubKey,
 		"ownerCertHash":  certHash,
-		"balances":       []interface{}{balance},
-		"escrowBalances": []interface{}{escrowBalance},
-		"digitalAssetTypes": []interface{}{
-			map[string]interface{}{
+		"balances":       []any{balance},
+		"escrowBalances": []any{escrowBalance},
+		"digitalAssetTypes": []any{
+			map[string]any{
 				"@key": "digitalAsset:" + assetID,
 			},
 		},
@@ -101,7 +101,7 @@ func (f *TestFixtures) CreateMockWallet(mockStub *MockStub, pubKey, certHash, wa
 // CreateMockUserDir creates a user directory entry in the mock state
 // The UserDirectory maps publicKeyHash -> walletUUID (NOT walletID)
 func (f *TestFixtures) CreateMockUserDir(mockStub *MockStub, pubKeyHash, walletUUID, certHash string) error {
-	userDirMap := map[string]interface{}{
+	userDirMap := map[string]any{
 		"@assetType":    "userdir",
 		"@key":          "userdir:" + pubKeyHash,
 		"publicKeyHash": pubKeyHash,
@@ -121,7 +121,7 @@ func (f *TestFixtures) CreateMockUserDir(mockStub *MockStub, pubKeyHash, walletU
 // assetID is cc-tools generated UUID
 // symbol is user-provided unique identifier
 func (f *TestFixtures) CreateMockDigitalAsset(mockStub *MockStub, assetID, symbol, name, issuerHash string, totalSupply float64) error {
-	assetMap := map[string]interface{}{
+	assetMap := map[string]any{
 		"@assetType":  "digitalAsset",
 		"@key":        "digitalAsset:" + assetID, // CC-tools composite key uses UUID
 		"name":        name,
@@ -144,7 +144,7 @@ func (f *TestFixtures) CreateMockDigitalAsset(mockStub *MockStub, assetID, symbo
 // CreateMockEscrow creates an escrow contract in the mock state
 // escrowID is user-provided unique identifier (IsKey: true)
 func (f *TestFixtures) CreateMockEscrow(mockStub *MockStub, escrowID, buyerWalletUUID, sellerWalletUUID, assetID, parcelID, conditionValue, status, buyerCertHash string, amount float64) error {
-	escrowMap := map[string]interface{}{
+	escrowMap := map[string]any{
 		"@assetType":       "escrow",
 		"@key":             "escrow:" + escrowID, // Uses escrowID as the key
 		"escrowId":         escrowID,             // User-provided (IsKey: true)
@@ -153,7 +153,7 @@ func (f *TestFixtures) CreateMockEscrow(mockStub *MockStub, escrowID, buyerWalle
 		"buyerWalletUUID":  buyerWalletUUID,  // References wallet UUID
 		"sellerWalletUUID": sellerWalletUUID, // References wallet UUID
 		"amount":           amount,
-		"assetType": map[string]interface{}{
+		"assetType": map[string]any{
 			"@key": "digitalAsset:" + assetID, // References asset UUID
 		},
 		"parcelId":       parcelID,
