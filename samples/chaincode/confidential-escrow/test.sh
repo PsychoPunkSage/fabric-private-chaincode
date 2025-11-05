@@ -155,10 +155,16 @@ test_debug() {
 }
 
 WALLET_UUID=""
+WALLET1_PUBKEY=""
+WALLET1_CERT=""
 WALLET2_UUID=""
+WALLET2_PUBKEY=""
+WALLET2_CERT=""
+ISSUER_CERT_HASH=""
 ESCROW_UUID=""
 DIGITAL_ASSET_UUID=""
 DIGITAL_ASSET_JSON=""
+TOKEN_SYMBOL=""
 
 store_asset_data() {
     local output="$1"
@@ -179,13 +185,19 @@ store_escrow_data() {
 test_create_asset() {
     log_info "Creating digital asset..."
     cd $FPC_PATH/samples/application/simple-cli-go
+    local timestamp=$(date +%s)
+    local issuer_hash="sha256:$(echo -n "issuer_${timestamp}" | sha256sum | cut -d' ' -f1)"
+    local token_symbol="CBDC${timestamp}"
+    ISSUER_CERT_HASH="$issuer_hash"
+    TOKEN_SYMBOL="$token_symbol"
+
     local output=$(./fpcclient invoke createDigitalAsset '{
-        "name": "CBDCC",
-        "symbol": "CBDCC", 
+        "name": "",
+        "symbol": "'"$token_symbol"'", 
         "decimals": 2,
         "totalSupply": 1000000,
         "owner": "central_bank",
-        "issuerHash": "sha256:abc123"
+        "issuerHash": "'"${issuer_hash}"'"
       }' 2>&1)
     echo "$output"
     store_asset_data "$output"
@@ -194,10 +206,18 @@ test_create_asset() {
 test_create_wallet() {
     log_info "Creating wallet..."
     cd $FPC_PATH/samples/application/simple-cli-go
+    local timestamp=$(date +%s)
+    local wallet_id="wallet-${timestamp}"
+    local owner_key="PsychoPunkSage_pubkey_${timestamp}"
+    local cert_hash="sha256:$(echo -n "${owner_key}" | sha256sum | cut -d' ' -f1)"
+
+    WALLET1_PUBKEY="$owner_key"
+    WALLET1_CERT="$cert_hash"
+
     local output=$(./fpcclient invoke createWallet "{
-    \"walletId\": \"wallet-111\",
-    \"ownerPubKey\": \"PsychoPunkSage_public_key\",
-    \"ownerCertHash\": \"sha256:def456\"
+    \"walletId\": \"${wallet_id}\",
+    \"ownerPubKey\": \"${owner_key}\",
+    \"ownerCertHash\": \"${cert_hash}\"
   }" 2>&1)
     echo "$output"
     echo "DIGITIAL ASSET JSON:> $DIGITAL_ASSET_JSON"
@@ -207,10 +227,18 @@ test_create_wallet() {
 test_create_wallet2() {
     log_info "Creating second wallet..."
     cd $FPC_PATH/samples/application/simple-cli-go
+    local timestamp=$(date +%s)
+    local wallet_id="wallet-${timestamp}-2"
+    local owner_key="Abhinav_Prakash_pubkey_${timestamp}"
+    local cert_hash="sha256:$(echo -n "${owner_key}" | sha256sum | cut -d' ' -f1)"
+
+    WALLET2_PUBKEY="$owner_key"
+    WALLET2_CERT="$cert_hash"
+
     local output=$(./fpcclient invoke createWallet "{
-        \"walletId\": \"wallet-222\",
-        \"ownerPubKey\": \"Abhinav_Prakash_public_key\",
-        \"ownerCertHash\": \"sha256:ghi789\"
+        \"walletId\": \"${wallet_id}\",
+        \"ownerPubKey\": \"${owner_key}\",
+        \"ownerCertHash\": \"${cert_hash}\"
     }" 2>&1)
     echo "$output"
     echo "DIGITIAL ASSET JSON:> $DIGITAL_ASSET_JSON"
@@ -220,15 +248,23 @@ test_create_wallet2() {
 test_create_and_lock_escrow() {
     log_info "Creating escrow and locking funds..."
     cd $FPC_PATH/samples/application/simple-cli-go
+    local timestamp=$(date +%s)
+    local escrow_id="escrow-${timestamp}"
+    local parcel_id="parcel-${timestamp}"
+    local secret="secret-${timestamp}"
+
+    ESCROW_SECRET="$secret"
+    ESCROW_PARCEL="$parcel_id"
+
     local output=$(./fpcclient invoke createAndLockEscrow "{
-        \"escrowId\": \"escrow-111\",
-        \"buyerPubKey\": \"PsychoPunkSage_public_key\",
-        \"sellerPubKey\": \"Abhinav_Prakash_public_key\",
+        \"escrowId\": \"$escrow_id\",
+        \"buyerPubKey\": \"$WALLET1_PUBKEY\",
+        \"sellerPubKey\": \"$WALLET2_PUBKEY\",
         \"amount\": 20,
         \"assetType\": $DIGITAL_ASSET_JSON,
-        \"parcelId\": \"par1\",
-        \"secret\": \"sec\",
-        \"buyerCertHash\": \"sha256:def456\"
+        \"parcelId\": \"$parcel_id\",
+        \"secret\": \"$secret\",
+        \"buyerCertHash\": \"$WALLET1_CERT\"
     }" 2>&1)
     echo "$output"
     store_escrow_data "$output"
@@ -246,20 +282,20 @@ test_query_wallet() {
     log_info "Querying wallet..."
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient query getWalletByOwner "{
-        \"pubKey\": \"PsychoPunkSage_public_key\",
-        \"ownerCertHash\": \"sha256:def456\"
+        \"pubKey\": \"$WALLET1_PUBKEY\",
+        \"ownerCertHash\": \"$WALLET1_CERT\"
     }"
 }
 
 test_get_balance() {
     log_info "Testing getBalance transaction"
 
-    # Test getting balance for CBDCC in wallet1
+    # Test getting balance for $TOKEN_SYMBOL in wallet1
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient query getBalance "{
-        \"pubKey\": \"PsychoPunkSage_public_key\",
-        \"assetSymbol\": \"CBDCC\", 
-        \"ownerCertHash\": \"sha256:def456\"
+        \"pubKey\": \"$WALLET1_PUBKEY\",
+        \"assetSymbol\": \"$TOKEN_SYMBOL\", 
+        \"ownerCertHash\": \"$WALLET1_CERT\"
     }"
 }
 
@@ -268,16 +304,16 @@ test_mint_tokens() {
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke mintTokens "{
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"pubKey\": \"Abhinav_Prakash_public_key\",
+        \"pubKey\": \"$WALLET2_PUBKEY\",
         \"amount\": 100,
-        \"issuerCertHash\": \"sha256:abc123\"
+        \"issuerCertHash\": \"$ISSUER_CERT_HASH\"
     }"
 
     ./fpcclient invoke mintTokens "{
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"pubKey\": \"PsychoPunkSage_public_key\",
+        \"pubKey\": \"$WALLET1_PUBKEY\",
         \"amount\": 100,
-        \"issuerCertHash\": \"sha256:abc123\"
+        \"issuerCertHash\": \"$ISSUER_CERT_HASH\"
     }"
 }
 
@@ -285,11 +321,11 @@ test_transfer_tokens() {
     log_info "Testing transferTokens transaction"
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke transferTokens "{
-        \"fromPubKey\": \"Abhinav_Prakash_public_key\",
-        \"toPubKey\": \"PsychoPunkSage_public_key\",
+        \"fromPubKey\": \"$WALLET2_PUBKEY\",
+        \"toPubKey\": \"$WALLET1_PUBKEY\",
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
         \"amount\": 50,
-        \"senderCertHash\": \"sha256:ghi789\"
+        \"senderCertHash\": \"$WALLET2_CERT\"
     }"
 }
 
@@ -298,9 +334,9 @@ test_burn_tokens() {
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke burnTokens "{
         \"assetId\": \"$DIGITAL_ASSET_UUID\",
-        \"pubKey\": \"PsychoPunkSage_public_key\",
+        \"pubKey\": \"$WALLET1_PUBKEY\",
         \"amount\": 25,
-        \"issuerCertHash\": \"sha256:abc123\"
+        \"issuerCertHash\": \"$ISSUER_CERT_HASH\"
     }"
 }
 
@@ -308,9 +344,9 @@ test_get_escrow_balance() {
     log_info "Testing getEscrowBalance transaction"
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient query getEscrowBalance "{
-        \"pubKey\": \"PsychoPunkSage_public_key\",
-        \"assetSymbol\": \"CBDCC\",
-        \"ownerCertHash\": \"sha256:def456\"
+        \"pubKey\": \"$WALLET1_PUBKEY\",
+        \"assetSymbol\": \"$TOKEN_SYMBOL\",
+        \"ownerCertHash\": \"$WALLET1_CERT\"
     }"
 }
 
@@ -319,9 +355,9 @@ test_release_escrow() {
     cd $FPC_PATH/samples/application/simple-cli-go
     ./fpcclient invoke releaseEscrow "{
         \"escrowUUID\": \"$ESCROW_UUID\",
-        \"secret\": \"sec\",
-        \"parcelId\": \"par1\",
-        \"sellerCertHash\": \"ghi789\"
+        \"secret\": \"$ESCROW_SECRET\",
+        \"parcelId\": \"$ESCROW_PARCEL\",
+        \"sellerCertHash\": \"$WALLET2_CERT\"
     }"
 }
 
@@ -331,13 +367,13 @@ test_refund_escrow() {
     # Create another escrow for refund test
     local output=$(./fpcclient invoke createAndLockEscrow "{
         \"escrowId\": \"escrow-222\",
-        \"buyerPubKey\": \"PsychoPunkSage_public_key\",
-        \"sellerPubKey\": \"Abhinav_Prakash_public_key\",
+        \"buyerPubKey\": \"$WALLET1_PUBKEY\",
+        \"sellerPubKey\": \"$WALLET2_PUBKEY\",
         \"amount\": 20,
         \"assetType\": $DIGITAL_ASSET_JSON,
-        \"parcelId\": \"par2\",
-        \"secret\": \"sec\",
-        \"buyerCertHash\": \"sha256:def456\"
+        \"parcelId\": \"$ESCROW_PARCEL\",
+        \"secret\": \"$ESCROW_SECRET\",
+        \"buyerCertHash\": \"$WALLET1_CERT\"
     }" 2>&1)
 
     local REFUND_ESCROW_UUID=$(echo "$output" | grep '^>' | sed 's/^> //' | grep -o '"@key":"escrow:[^"]*"' | cut -d':' -f3 | tr -d '"')
@@ -345,8 +381,8 @@ test_refund_escrow() {
     # Now refund
     ./fpcclient invoke refundEscrow "{
         \"escrowUUID\": \"$REFUND_ESCROW_UUID\",
-        \"buyerPubKey\": \"PsychoPunkSage_public_key\",
-        \"buyerCertHash\": \"sha256:def456\"
+        \"buyerPubKey\": \"$WALLET1_PUBKEY\",
+        \"buyerCertHash\": \"$WALLET1_CERT\"
     }"
 }
 
@@ -379,10 +415,12 @@ run_tests() {
 
     # New escrow tests
     log_info "=== ESCROW SYSTEM TESTS ==="
-    test_lock_funds_in_escrow
     test_get_balance
     test_get_escrow_balance
     test_release_escrow
+    test_get_balance
+    test_get_escrow_balance
+    test_create_and_lock_escrow
     test_get_balance
     test_get_escrow_balance
     test_refund_escrow

@@ -1144,14 +1144,14 @@ reset_system() {
 
 # Source main.sh for setup functions
 source_main_script() {
-    local main_script="$FPC_PATH/samples/chaincode/confidential-escrow/main.sh"
+    local main_script="$FPC_PATH/samples/chaincode/confidential-escrow/test.sh"
 
     if [ -f "$main_script" ]; then
         # Source only the functions, don't execute main
         source "$main_script"
-        log_info "Loaded setup functions from main.sh"
+        log_info "Loaded setup functions from test.sh"
     else
-        log_error "main.sh not found at: $main_script"
+        log_error "test.sh not found at: $main_script"
         exit 1
     fi
 }
@@ -1171,7 +1171,7 @@ detect_environment() {
 # SETUP #
 #########
 
-# Wrapper functions that call main.sh functions
+# Wrapper functions that call test.sh functions
 do_full_setup() {
     if [ "$MAIN_SCRIPT_SOURCED" = "false" ]; then
         source_main_script
@@ -1291,7 +1291,7 @@ main() {
 
         case $choice in
         1 | 2 | 7)
-            # Source main.sh once for setup operations
+            # Source test.sh once for setup operations
             if [ "$MAIN_SCRIPT_SOURCED" = "false" ]; then
                 source_main_script
                 MAIN_SCRIPT_SOURCED="true"
