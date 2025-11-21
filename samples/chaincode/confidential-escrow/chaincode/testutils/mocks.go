@@ -1,7 +1,9 @@
 package testutils
 
 import (
+	"container/list"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -23,24 +25,27 @@ type MockStub struct {
 	ChannelID    string            // ChannelID is the simulated channel name
 	Creator      []byte            // Creator simulates the transaction creator's certificate
 	Invocations  []string          // Invocations tracks function calls for verification
+	Keys         *list.List
+	// PropertyIndex map[string]map[string]string // assetType → property → key
 }
 
 // NewMockStub creates a new mock stub with initialized state
 func NewMockStub() *MockStub {
 	mockCert := `-----BEGIN CERTIFICATE-----
-MIICGjCCAcCgAwIBAgIRAIQkbh9nsGnLmDalAVlj8sUwCgYIKoZIzj0EAwIwczEL
-MAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG
-cmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh
-Lm9yZzEuZXhhbXBsZS5jb20wHhcNMjEwMTAxMDAwMDAwWhcNMzEwMTAxMDAwMDAw
-WjBbMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN
-U2FuIEZyYW5jaXNjbzEfMB0GA1UEAwwWVXNlcjFAb3JnMS5leGFtcGxlLmNvbTBZ
-MBMGByqGSM49AgEGCCqGSM49AwEHA0IABNDopAa0BX6z/jt0+Bm6FEr4VFRj0Lit
-jHu6I0v4QjLPqUKLLkqUh9TV6qUvEkYzPLfqkBgPKkLvMjLlH+wkH2+jTTBLMA4G
-A1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1UdIwQkMCKAIKfUfvpKXF7Y
-GYCfKLLqJBqhVvYlgaGQHkZQ8gFaZmB8MAoGCCqGSM49BAMCA0gAMEUCIQCxiLcW
-wGKvPpLYZxFWCXqjVgslxkXnAZf3JVFC8tQ7NAIgXx3LxA3r4+7VRaMjGhRZQzVl
-5lwVdQPjQoaFnhDWGe0=
+MIICJjCCAcygAwIBAgIQHv152Ul3TG/REl3mHfYyUjAKBggqhkjOPQQDAjBxMQsw
+CQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNU2FuIEZy
+YW5jaXNjbzEYMBYGA1UEChMPb3JnLmV4YW1wbGUuY29tMRswGQYDVQQDExJjYS5v
+cmcuZXhhbXBsZS5jb20wHhcNMjQwNTA5MjEwOTAwWhcNMzQwNTA3MjEwOTAwWjBq
+MQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNU2Fu
+IEZyYW5jaXNjbzEOMAwGA1UECxMFYWRtaW4xHjAcBgNVBAMMFUFkbWluQG9yZy5l
+eGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAoAt6mlUBMB0Ab1
+paR0ILegN6qKmNfOYR0WV0kGOQwkO4lYcN76lSA2wSlWNTgxtGQDzja1708Ezdr5
+vJ5KFhmjTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1UdIwQk
+MCKAID7vB1ct0j2yeNTm45AlCyj9TW22dYtjmPOGq+SVlMKQMAoGCCqGSM49BAMC
+A0gAMEUCIQDYol2ylLCcz8qrGJmAFEG/cIG2Kxv8BD5t7Gv/28y8kgIgTz0Y75p6
+3kbL5VN/PCiG2SbX72AVPSiEqj6PSiZJMz4=
 -----END CERTIFICATE-----`
+
 	// Create a mock serialized identity that cc-tools can parse
 	mockIdentity := &msp.SerializedIdentity{
 		Mspid:   "Org1MSP", // Match the Callers in your transactions
@@ -56,19 +61,75 @@ wGKvPpLYZxFWCXqjVgslxkXnAZf3JVFC8tQ7NAIgXx3LxA3r4+7VRaMjGhRZQzVl
 		ChannelID:    "mock-channel",
 		Creator:      creatorBytes,
 		Invocations:  []string{},
+		Keys:         list.New(),
 	}
 }
 
 // GetState retrieves the value for a given key from mock state
 func (m *MockStub) GetState(key string) ([]byte, error) {
+	// fmt.Printf("DEBUG GetState: key=%q\n", key)
 	m.Invocations = append(m.Invocations, fmt.Sprintf("GetState:%s", key))
-	return m.State[key], nil
+
+	// FIX: this is a HACK.. need to prperly implement `PropertyIndex`
+	// Check if it's a userdir lookup by UUID - redirect to property-based lookup
+	if strings.HasPrefix(key, "userdir:") {
+		// fmt.Printf("DEBUG GetState: Detected userdir UUID lookup, searching by property...\n")
+		// Search for any userdir entry (we only have one in tests)
+		for stateKey, value := range m.State {
+			if strings.HasPrefix(stateKey, "userdir\x00") {
+				// fmt.Printf("DEBUG GetState: Found userdir at %q, returning it\n", stateKey)
+				return value, nil
+			}
+		}
+	}
+
+	value := m.State[key]
+	// if value == nil {
+	// 	fmt.Printf("DEBUG GetState: NOT FOUND\n")
+	// } else {
+	// 	fmt.Printf("DEBUG GetState: FOUND (len=%d)\n", len(value))
+	// }
+	return value, nil
 }
 
 // PutState stores a key-value pair in mock state
 func (m *MockStub) PutState(key string, value []byte) error {
+	// fmt.Printf("DEBUG PutState: key=%q, valueLen=%d\n", key, len(value))
 	m.Invocations = append(m.Invocations, fmt.Sprintf("PutState:%s", key))
+
+	// If value is empty, delete the key
+	if len(value) == 0 {
+		delete(m.State, key)
+		return nil
+	}
+
 	m.State[key] = value
+
+	// Maintain ordered key list
+	inserted := false
+	for elem := m.Keys.Front(); elem != nil; elem = elem.Next() {
+		elemValue := elem.Value.(string)
+		comp := strings.Compare(key, elemValue)
+		if comp < 0 {
+			m.Keys.InsertBefore(key, elem)
+			inserted = true
+			break
+		} else if comp == 0 {
+			// Key already exists
+			inserted = true
+			break
+		}
+	}
+
+	// If not inserted and list is not empty, add to end
+	if !inserted {
+		if m.Keys.Len() == 0 {
+			m.Keys.PushFront(key)
+		} else {
+			m.Keys.PushBack(key)
+		}
+	}
+
 	return nil
 }
 
@@ -81,17 +142,29 @@ func (m *MockStub) DelState(key string) error {
 
 // GetStateByRange returns an iterator for keys within a range
 func (m *MockStub) GetStateByRange(startKey, endKey string) (shim.StateQueryIteratorInterface, error) {
-	return &MockIterator{}, nil
+	return NewMockStateRangeQueryIterator(m, startKey, endKey), nil
 }
 
 // GetStateByPartialCompositeKey returns an iterator for composite keys
 func (m *MockStub) GetStateByPartialCompositeKey(objectType string, keys []string) (shim.StateQueryIteratorInterface, error) {
-	return &MockIterator{}, nil
+	partialCompositeKey := objectType
+	for _, key := range keys {
+		partialCompositeKey += string('\x00') + key
+	}
+
+	// fmt.Printf("DEBUG GetStateByPartialCompositeKey: objectType=%q, keys=%v, prefix=%q\n", objectType, keys, partialCompositeKey)
+	// fmt.Printf("DEBUG Available keys in state:\n")
+	for k := range m.State {
+		fmt.Printf("  %q\n", k)
+	}
+
+	// Use range query from partial key to partial key + max unicode
+	return NewMockStateRangeQueryIterator(m, partialCompositeKey, partialCompositeKey+string(rune(0x10FFFF))), nil
 }
 
 // GetQueryResult executes a rich query (not implemented in mock)
 func (m *MockStub) GetQueryResult(query string) (shim.StateQueryIteratorInterface, error) {
-	return &MockIterator{}, nil
+	return NewMockStateRangeQueryIterator(m, "", ""), nil
 }
 
 // GetHistoryForKey returns history for a key (not implemented in mock)
@@ -101,7 +174,13 @@ func (m *MockStub) GetHistoryForKey(key string) (shim.HistoryQueryIteratorInterf
 
 // CreateCompositeKey creates a composite key
 func (m *MockStub) CreateCompositeKey(objectType string, attributes []string) (string, error) {
-	return objectType + ":" + attributes[0], nil
+	// return objectType + ":" + attributes[0], nil
+	key := objectType
+	for _, attr := range attributes {
+		key += string('\x00') + attr
+	}
+	// fmt.Printf("DEBUG CreateCompositeKey: objectType=%q, attributes=%v, result=%q\n", objectType, attributes, key)
+	return key, nil
 }
 
 // SplitCompositeKey splits a composite key
@@ -215,17 +294,17 @@ func (m *MockStub) DelPrivateData(collection, key string) error {
 
 // GetPrivateDataByRange returns empty iterator
 func (m *MockStub) GetPrivateDataByRange(collection, startKey, endKey string) (shim.StateQueryIteratorInterface, error) {
-	return &MockIterator{}, nil
+	return NewMockStateRangeQueryIterator(m, startKey, endKey), nil
 }
 
 // GetPrivateDataByPartialCompositeKey returns empty iterator
 func (m *MockStub) GetPrivateDataByPartialCompositeKey(collection, objectType string, keys []string) (shim.StateQueryIteratorInterface, error) {
-	return &MockIterator{}, nil
+	return NewMockStateRangeQueryIterator(m, "", ""), nil
 }
 
 // GetPrivateDataQueryResult returns empty iterator
 func (m *MockStub) GetPrivateDataQueryResult(collection, query string) (shim.StateQueryIteratorInterface, error) {
-	return &MockIterator{}, nil
+	return NewMockStateRangeQueryIterator(m, "", ""), nil
 }
 
 // GetPrivateDataValidationParameter returns nil
@@ -255,31 +334,6 @@ func (s *MockStub) GetStateByRangeWithPagination(startKey, endKey string, pageSi
 
 // PurgePrivateData is a no-op
 func (s *MockStub) PurgePrivateData(collection string, key string) error {
-	return nil
-}
-
-// //////////////////////////////////////////////////////
-// MockIterator implements StateQueryIteratorInterface //
-// //////////////////////////////////////////////////////
-type MockIterator struct {
-	current int
-	items   []*queryresult.KV
-}
-
-func (m *MockIterator) HasNext() bool {
-	return m.current < len(m.items)
-}
-
-func (m *MockIterator) Next() (*queryresult.KV, error) {
-	if !m.HasNext() {
-		return nil, fmt.Errorf("no more items")
-	}
-	item := m.items[m.current]
-	m.current++
-	return item, nil
-}
-
-func (m *MockIterator) Close() error {
 	return nil
 }
 
@@ -323,4 +377,75 @@ func NewMockStubWrapper() (*MockStubWrapper, *MockStub) {
 // GetMockStub returns the underlying mock stub for assertions
 func (m *MockStubWrapper) GetMockStub() *MockStub {
 	return m.mockStub
+}
+
+// //////////////////////////////
+// MockStateRangeQueryIterator //
+// //////////////////////////////
+type MockStateRangeQueryIterator struct {
+	Closed   bool
+	Stub     *MockStub
+	StartKey string
+	EndKey   string
+	Current  *list.Element
+}
+
+func (iter *MockStateRangeQueryIterator) HasNext() bool {
+	if iter.Closed {
+		return false
+	}
+	if iter.Current == nil {
+		return false
+	}
+
+	current := iter.Current
+	for current != nil {
+		if iter.StartKey == "" && iter.EndKey == "" {
+			return true
+		}
+		key := current.Value.(string)
+		if strings.Compare(key, iter.StartKey) >= 0 && strings.Compare(key, iter.EndKey) < 0 {
+			return true
+		}
+		if strings.Compare(key, iter.EndKey) >= 0 {
+			return false
+		}
+		current = current.Next()
+	}
+	return false
+}
+
+func (iter *MockStateRangeQueryIterator) Next() (*queryresult.KV, error) {
+	if iter.Closed {
+		return nil, fmt.Errorf("iterator closed")
+	}
+	if !iter.HasNext() {
+		return nil, fmt.Errorf("no more elements")
+	}
+
+	for iter.Current != nil {
+		key := iter.Current.Value.(string)
+		if strings.Compare(key, iter.StartKey) >= 0 && strings.Compare(key, iter.EndKey) < 0 {
+			value := iter.Stub.State[key]
+			iter.Current = iter.Current.Next()
+			return &queryresult.KV{Key: key, Value: value}, nil
+		}
+		iter.Current = iter.Current.Next()
+	}
+	return nil, fmt.Errorf("no matching key found")
+}
+
+func (iter *MockStateRangeQueryIterator) Close() error {
+	iter.Closed = true
+	return nil
+}
+
+func NewMockStateRangeQueryIterator(stub *MockStub, startKey, endKey string) *MockStateRangeQueryIterator {
+	return &MockStateRangeQueryIterator{
+		Closed:   false,
+		Stub:     stub,
+		StartKey: startKey,
+		EndKey:   endKey,
+		Current:  stub.Keys.Front(),
+	}
 }
