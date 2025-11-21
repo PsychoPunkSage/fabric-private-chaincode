@@ -101,9 +101,13 @@ func (f *TestFixtures) CreateMockWallet(mockStub *MockStub, pubKey, certHash, wa
 // CreateMockUserDir creates a user directory entry in the mock state
 // The UserDirectory maps publicKeyHash -> walletUUID (NOT walletID)
 func (f *TestFixtures) CreateMockUserDir(mockStub *MockStub, pubKeyHash, walletUUID, certHash string) error {
+	compositeKey := "userdir" + string('\x00') + pubKeyHash
+	// generatedUUID := uuid.New().String()
+	// compositeKey := "userdir:" + generatedUUID
+
 	userDirMap := map[string]any{
 		"@assetType":    "userdir",
-		"@key":          "userdir:" + pubKeyHash,
+		"@key":          compositeKey,
 		"publicKeyHash": pubKeyHash,
 		"walletUUID":    walletUUID, // References the UUID, not the ID
 		"certHash":      certHash,
@@ -114,7 +118,8 @@ func (f *TestFixtures) CreateMockUserDir(mockStub *MockStub, pubKeyHash, walletU
 		return err
 	}
 
-	return mockStub.PutState("userdir:"+pubKeyHash, userDirJSON)
+	// return mockStub.PutState("userdir:"+pubKeyHash, userDirJSON)
+	return mockStub.PutState(compositeKey, userDirJSON)
 }
 
 // CreateMockDigitalAsset creates a digital asset in the mock state
