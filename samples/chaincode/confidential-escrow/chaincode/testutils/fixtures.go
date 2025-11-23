@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -101,13 +102,15 @@ func (f *TestFixtures) CreateMockWallet(mockStub *MockStub, pubKey, certHash, wa
 // CreateMockUserDir creates a user directory entry in the mock state
 // The UserDirectory maps publicKeyHash -> walletUUID (NOT walletID)
 func (f *TestFixtures) CreateMockUserDir(mockStub *MockStub, pubKeyHash, walletUUID, certHash string) error {
-	compositeKey := "userdir" + string('\x00') + pubKeyHash
-	// generatedUUID := uuid.New().String()
-	// compositeKey := "userdir:" + generatedUUID
+	// Generate UUID for @key
+	hash := sha256.Sum256([]byte("userdir" + pubKeyHash))
+	uuidStr := fmt.Sprintf("%x-%x-%x-%x-%x",
+		hash[0:4], hash[4:6], hash[6:8], hash[8:10], hash[10:16])
+	uuidKey := "userdir:" + uuidStr
 
 	userDirMap := map[string]any{
 		"@assetType":    "userdir",
-		"@key":          compositeKey,
+		"@key":          uuidKey,
 		"publicKeyHash": pubKeyHash,
 		"walletUUID":    walletUUID, // References the UUID, not the ID
 		"certHash":      certHash,
@@ -118,8 +121,8 @@ func (f *TestFixtures) CreateMockUserDir(mockStub *MockStub, pubKeyHash, walletU
 		return err
 	}
 
-	// return mockStub.PutState("userdir:"+pubKeyHash, userDirJSON)
-	return mockStub.PutState(compositeKey, userDirJSON)
+	// Store with UUID key - PutState will auto-create composite index based on registry
+	return mockStub.PutState(uuidKey, userDirJSON)
 }
 
 // CreateMockDigitalAsset creates a digital asset in the mock state
@@ -148,21 +151,39 @@ func (f *TestFixtures) CreateMockDigitalAsset(mockStub *MockStub, assetID, symbo
 
 // CreateMockEscrow creates an escrow contract in the mock state
 // escrowID is user-provided unique identifier (IsKey: true)
-func (f *TestFixtures) CreateMockEscrow(mockStub *MockStub, escrowID, buyerWalletUUID, sellerWalletUUID, assetID, parcelID, conditionValue, status, buyerCertHash string, amount float64) error {
+func (f *TestFixtures) CreateMockEscrow(
+	mockStub *MockStub,
+	escrowID string,
+	buyerPubKey string,
+	sellerPubKey string,
+	buyerWalletUUID string,
+	sellerWalletUUID string,
+	assetID string,
+	amount float64,
+	parcelID string,
+	secret string,
+	status string,
+	buyerCertHash string,
+) error {
+	// Compute condition hash: SHA256(secret + parcelId)
+	conditionData := secret + parcelID
+	conditionHash := sha256.Sum256([]byte(conditionData))
+	conditionValue := hex.EncodeToString(conditionHash[:])
+
 	escrowMap := map[string]any{
 		"@assetType":       "escrow",
-		"@key":             "escrow:" + escrowID, // Uses escrowID as the key
-		"escrowId":         escrowID,             // User-provided (IsKey: true)
-		"buyerPubKey":      f.BuyerPubKey,
-		"sellerPubKey":     f.SellerPubKey,
-		"buyerWalletUUID":  buyerWalletUUID,  // References wallet UUID
-		"sellerWalletUUID": sellerWalletUUID, // References wallet UUID
+		"@key":             "escrow:" + escrowID,
+		"escrowId":         escrowID,
+		"buyerPubKey":      buyerPubKey,
+		"sellerPubKey":     sellerPubKey,
+		"buyerWalletUUID":  buyerWalletUUID,
+		"sellerWalletUUID": sellerWalletUUID,
 		"amount":           amount,
 		"assetType": map[string]any{
-			"@key": "digitalAsset:" + assetID, // References asset UUID
+			"@key": "digitalAsset:" + assetID,
 		},
 		"parcelId":       parcelID,
-		"conditionValue": conditionValue,
+		"conditionValue": conditionValue, // Computed from secret + parcelID
 		"status":         status,
 		"createdAt":      time.Now(),
 		"buyerCertHash":  buyerCertHash,
