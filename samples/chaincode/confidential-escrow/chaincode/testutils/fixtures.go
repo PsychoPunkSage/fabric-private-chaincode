@@ -74,10 +74,15 @@ func NewTestFixtures() *TestFixtures {
 // walletID is the user-provided nickname
 // walletUUID is the cc-tools generated unique identifier
 func (f *TestFixtures) CreateMockWallet(mockStub *MockStub, pubKey, certHash, walletID, walletUUID string, assetID string, balance, escrowBalance float64) error {
+	fmt.Printf("\nDEBUG CreateMockWallet called:\n")
+	fmt.Printf("DEBUG   pubKey: %q\n", pubKey)
+	fmt.Printf("DEBUG   walletID: %q\n", walletID)
+	fmt.Printf("DEBUG   walletUUID: %q\n", walletUUID)
+
 	walletMap := map[string]any{
 		"@assetType":     "wallet",
-		"@key":           "wallet:" + walletUUID, // CC-tools composite key
-		"walletId":       walletID,               // User-provided nickname
+		"@key":           "wallet:" + walletUUID,
+		"walletId":       walletID,
 		"ownerPubKey":    pubKey,
 		"ownerCertHash":  certHash,
 		"balances":       []any{balance},
@@ -95,9 +100,35 @@ func (f *TestFixtures) CreateMockWallet(mockStub *MockStub, pubKey, certHash, wa
 		return err
 	}
 
-	// Store by UUID (the actual ledger key)
+	fmt.Printf("DEBUG   Storing with key: %q\n", "wallet:"+walletUUID)
 	return mockStub.PutState("wallet:"+walletUUID, walletJSON)
 }
+
+// func (f *TestFixtures) CreateMockWallet(mockStub *MockStub, pubKey, certHash, walletID, walletUUID string, assetID string, balance, escrowBalance float64) error {
+// 	walletMap := map[string]any{
+// 		"@assetType":     "wallet",
+// 		"@key":           "wallet:" + walletUUID, // CC-tools composite key
+// 		"walletId":       walletID,               // User-provided nickname
+// 		"ownerPubKey":    pubKey,
+// 		"ownerCertHash":  certHash,
+// 		"balances":       []any{balance},
+// 		"escrowBalances": []any{escrowBalance},
+// 		"digitalAssetTypes": []any{
+// 			map[string]any{
+// 				"@key": "digitalAsset:" + assetID,
+// 			},
+// 		},
+// 		"createdAt": time.Now(),
+// 	}
+//
+// 	walletJSON, err := json.Marshal(walletMap)
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	// Store by UUID (the actual ledger key)
+// 	return mockStub.PutState("wallet:"+walletUUID, walletJSON)
+// }
 
 // CreateMockUserDir creates a user directory entry in the mock state
 // The UserDirectory maps publicKeyHash -> walletUUID (NOT walletID)
