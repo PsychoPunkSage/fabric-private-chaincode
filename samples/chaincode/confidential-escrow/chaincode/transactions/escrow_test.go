@@ -139,89 +139,89 @@ func TestCreateAndLockEscrow_Success(t *testing.T) {
 	t.Log("✓ Escrow created and funds locked successfully")
 }
 
-// func TestCreateAndLockEscrow_InsufficientBalance(t *testing.T) {
-// 	wrapper, mockStub := testutils.NewMockStubWrapper()
-// 	fixtures := testutils.NewTestFixtures()
-//
-// 	// Setup: Create digital asset
-// 	err := fixtures.CreateMockDigitalAsset(
-// 		mockStub,
-// 		fixtures.AssetID,
-// 		fixtures.AssetSymbol,
-// 		fixtures.AssetName,
-// 		fixtures.IssuerCertHash,
-// 		1000.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create mock digital asset: %v", err)
-// 	}
-//
-// 	// Setup: Create buyer wallet with insufficient balance
-// 	err = fixtures.CreateMockWallet(
-// 		mockStub,
-// 		fixtures.BuyerPubKey,
-// 		fixtures.BuyerCertHash,
-// 		fixtures.BuyerWalletID,
-// 		fixtures.BuyerWalletUUID,
-// 		fixtures.AssetID,
-// 		50.0, // only 50 available
-// 		0.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create buyer wallet: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockUserDir(
-// 		mockStub,
-// 		fixtures.BuyerPubKeyHash,
-// 		fixtures.BuyerWalletUUID,
-// 		fixtures.BuyerCertHash,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create buyer user directory: %v", err)
-// 	}
-//
-// 	// Setup: Create seller wallet and directory
-// 	err = fixtures.CreateMockWallet(
-// 		mockStub,
-// 		fixtures.SellerPubKey,
-// 		fixtures.SellerCertHash,
-// 		fixtures.SellerWalletID,
-// 		fixtures.SellerWalletUUID,
-// 		fixtures.AssetID,
-// 		0.0,
-// 		0.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create seller wallet: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockUserDir(
-// 		mockStub,
-// 		fixtures.SellerPubKeyHash,
-// 		fixtures.SellerWalletUUID,
-// 		fixtures.SellerCertHash,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create seller user directory: %v", err)
-// 	}
-//
-// 	// Try to lock more than available
-// 	args := map[string]any{
-// 		"escrowId":      fixtures.EscrowID,
-// 		"buyerPubKey":   fixtures.BuyerPubKey,
-// 		"sellerPubKey":  fixtures.SellerPubKey,
-// 		"amount":        100.0, // trying to lock 100 but only have 50
-// 		"assetType":     assets.Key{"@key": "digitalAsset:" + fixtures.AssetID},
-// 		"parcelId":      fixtures.ParcelID,
-// 		"secret":        fixtures.Secret,
-// 		"buyerCertHash": fixtures.BuyerCertHash,
-// 	}
-//
-// 	_, txErr := CreateAndLockEscrow.Routine(wrapper.StubWrapper, args)
-// 	testutils.AssertError(t, txErr, "should fail with insufficient balance")
-// 	testutils.AssertErrorStatus(t, txErr, 400, "should return 400 status")
-// }
+func TestCreateAndLockEscrow_InsufficientBalance(t *testing.T) {
+	wrapper, mockStub := testutils.NewMockStubWrapper()
+	fixtures := testutils.NewTestFixtures()
+
+	// Setup: Create digital asset
+	err := fixtures.CreateMockDigitalAsset(
+		mockStub,
+		fixtures.AssetID,
+		fixtures.AssetSymbol,
+		fixtures.AssetName,
+		fixtures.IssuerCertHash,
+		1000.0,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create mock digital asset: %v", err)
+	}
+
+	// Setup: Create buyer wallet with insufficient balance
+	err = fixtures.CreateMockWallet(
+		mockStub,
+		fixtures.BuyerPubKey,
+		fixtures.BuyerCertHash,
+		fixtures.BuyerWalletID,
+		fixtures.BuyerWalletUUID,
+		fixtures.AssetID,
+		50.0, // only 50 available
+		0.0,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create buyer wallet: %v", err)
+	}
+
+	err = fixtures.CreateMockUserDir(
+		mockStub,
+		fixtures.BuyerPubKeyHash,
+		fixtures.BuyerWalletUUID,
+		fixtures.BuyerCertHash,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create buyer user directory: %v", err)
+	}
+
+	// Setup: Create seller wallet and directory
+	err = fixtures.CreateMockWallet(
+		mockStub,
+		fixtures.SellerPubKey,
+		fixtures.SellerCertHash,
+		fixtures.SellerWalletID,
+		fixtures.SellerWalletUUID,
+		fixtures.AssetID,
+		0.0,
+		0.0,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create seller wallet: %v", err)
+	}
+
+	err = fixtures.CreateMockUserDir(
+		mockStub,
+		fixtures.SellerPubKeyHash,
+		fixtures.SellerWalletUUID,
+		fixtures.SellerCertHash,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create seller user directory: %v", err)
+	}
+
+	// Try to lock more than available
+	args := map[string]any{
+		"escrowId":      fixtures.EscrowID,
+		"buyerPubKey":   fixtures.BuyerPubKey,
+		"sellerPubKey":  fixtures.SellerPubKey,
+		"amount":        100.0, // trying to lock 100 but only have 50
+		"assetType":     assets.Key{"@key": "digitalAsset:" + fixtures.AssetID},
+		"parcelId":      fixtures.ParcelID,
+		"secret":        fixtures.Secret,
+		"buyerCertHash": fixtures.BuyerCertHash,
+	}
+
+	_, txErr := CreateAndLockEscrow.Routine(wrapper.StubWrapper, args)
+	testutils.AssertError(t, txErr, "should fail with insufficient balance")
+	testutils.AssertErrorStatus(t, txErr, 400, "should return 400 status")
+}
 
 func TestCreateAndLockEscrow_BuyerWalletNotFound(t *testing.T) {
 	wrapper, _ := testutils.NewMockStubWrapper()
