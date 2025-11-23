@@ -76,138 +76,80 @@ A0gAMEUCIQDYol2ylLCcz8qrGJmAFEG/cIG2Kxv8BD5t7Gv/28y8kgIgTz0Y75p6
 }
 
 // GetState retrieves the value for a given key from mock state
-// func (m *MockStub) GetState(key string) ([]byte, error) {
-// 	m.Invocations = append(m.Invocations, fmt.Sprintf("GetState:%s", key))
-//
-// 	// Direct UUID key lookup (e.g., "wallet:uuid", "escrow:uuid")
-// 	if value, exists := m.State[key]; exists {
-// 		return value, nil
-// 	}
-//
-// 	// Check if it's a composite key lookup
-// 	// Composite keys have format: "assetType\x00property\x00value\x00"
-// 	if strings.Contains(key, "\x00") {
-// 		parts := strings.Split(key, "\x00")
-// 		if len(parts) < 3 {
-// 			return nil, nil // Invalid composite key format
-// 		}
-//
-// 		assetType := parts[0]
-// 		propertyName := parts[1]
-// 		propertyValue := parts[2]
-//
-// 		// Verify this is a valid indexed property
-// 		indexedProps, exists := CompositeKeyRegistry[assetType]
-// 		if !exists {
-// 			return nil, nil // Asset type not in registry
-// 		}
-//
-// 		// Check if the property is indexed
-// 		isIndexed := false
-// 		for _, indexedProp := range indexedProps {
-// 			if indexedProp == propertyName {
-// 				isIndexed = true
-// 				break
-// 			}
-// 		}
-//
-// 		if !isIndexed {
-// 			return nil, nil // Property is not indexed
-// 		}
-//
-// 		// Search through all states to find matching asset
-// 		for stateKey, value := range m.State {
-// 			// Check if this state key is for the correct asset type
-// 			if strings.HasPrefix(stateKey, assetType+":") || strings.HasPrefix(stateKey, assetType+"\x00") {
-// 				var assetData map[string]any
-// 				if err := json.Unmarshal(value, &assetData); err != nil {
-// 					continue
-// 				}
-//
-// 				// Verify the asset type matches
-// 				if storedAssetType, ok := assetData["@assetType"].(string); ok {
-// 					if storedAssetType == assetType {
-// 						// Check if the property value matches
-// 						if storedValue, ok := assetData[propertyName]; ok {
-// 							if fmt.Sprintf("%v", storedValue) == propertyValue {
-// 								return value, nil
-// 							}
-// 						}
-// 					}
-// 				}
-// 			}
-// 		}
-//
-// 		// No match found for composite key
-// 		return nil, nil
-// 	}
-//
-// 	// Key not found
-// 	return nil, nil
-// }
-
 func (m *MockStub) GetState(key string) ([]byte, error) {
-	// fmt.Printf("DEBUG GetState: key=%q\n", key)
+	fmt.Printf("DEBUG GetState called with key: %q\n", key)
 	m.Invocations = append(m.Invocations, fmt.Sprintf("GetState:%s", key))
 
-	// Check if it's a userdir lookup by UUID - match by trying all userdirs
-	if strings.HasPrefix(key, "userdir:") {
-		// Approach: Check all userdirs and try to match
-		for stateKey, value := range m.State {
-			if strings.HasPrefix(stateKey, "userdir\x00") {
-				// Parse the userdir to get its data
-				var userDirData map[string]any
-				json.Unmarshal(value, &userDirData)
+	// First: Always try direct lookup
+	if value, exists := m.State[key]; exists {
+		fmt.Printf("DEBUG Direct lookup SUCCESS for key: %q\n", key)
+		return value, nil
+	}
+	fmt.Printf("DEBUG Direct lookup FAILED for key: %q\n", key)
 
-				// Check if this userdir's @key matches the requested UUID format
-				if storedKey, ok := userDirData["@key"].(string); ok {
-					if storedKey == key {
-						return value, nil
-					}
+	// Second: If key matches "assetType:uuid" pattern, search composite keys
+	if strings.Contains(key, ":") {
+		parts := strings.Split(key, ":")
+		if len(parts) == 2 {
+			assetType := parts[0]
+			fmt.Printf("DEBUG Searching composite keys for assetType: %q\n", assetType)
+
+			// Search all composite keys for this asset type
+			compositePrefix := assetType + "\x00"
+			fmt.Printf("DEBUG Composite prefix: %q\n", compositePrefix)
+
+			// Just return the FIRST matching composite key
+			// Don't try to match @key since CCTools generates different UUIDs
+			for stateKey, value := range m.State {
+				if strings.HasPrefix(stateKey, compositePrefix) {
+					fmt.Printf("DEBUG Found composite key: %q - RETURNING IT\n", stateKey)
+					return value, nil
 				}
 			}
-		}
 
-		// If no match found with @key, fall back to returning any userdir
-		// This is the old behavior for backward compatibility
-		for stateKey, value := range m.State {
-			if strings.HasPrefix(stateKey, "userdir\x00") {
-				return value, nil
-			}
+			fmt.Printf("DEBUG No composite keys found with prefix: %q\n", compositePrefix)
 		}
 	}
 
-	value := m.State[key]
-	return value, nil
+	fmt.Printf("DEBUG GetState returning nil for key: %q\n", key)
+	return nil, nil
 }
 
 // PutState stores a key-value pair in mock state
 func (m *MockStub) PutState(key string, value []byte) error {
+	fmt.Printf("DEBUG PutState called with key: %q\n", key)
 	m.Invocations = append(m.Invocations, fmt.Sprintf("PutState:%s", key))
 
-	// If value is empty, delete the key
 	if len(value) == 0 {
 		delete(m.State, key)
 		return nil
 	}
 
 	m.State[key] = value
+	fmt.Printf("DEBUG Stored key: %q\n", key)
 
-	// Generic composite key indexing for any registered asset type
+	// Generic composite key indexing
 	var assetData map[string]any
 	if err := json.Unmarshal(value, &assetData); err == nil {
 		assetType, _ := assetData["@assetType"].(string)
+		fmt.Printf("DEBUG Asset type: %q\n", assetType)
 
 		// Check if this asset type has registered composite key properties
 		if indexedProps, exists := CompositeKeyRegistry[assetType]; exists {
+			fmt.Printf("DEBUG Indexed properties for %q: %v\n", assetType, indexedProps)
+
 			// For each indexed property, create a composite key
 			for _, propName := range indexedProps {
 				if propValue, ok := assetData[propName].(string); ok && propValue != "" {
-					// Create composite key: assetType\x00propertyValue
 					compositeKey := assetType + string('\x00') + propValue
 					m.State[compositeKey] = value
+					fmt.Printf("DEBUG Created composite key: %q (property: %s=%s)\n", compositeKey, propName, propValue)
+				} else {
+					fmt.Printf("DEBUG Property %q not found or empty\n", propName)
 				}
 			}
+		} else {
+			fmt.Printf("DEBUG No composite key registry entry for asset type: %q\n", assetType)
 		}
 	}
 
@@ -221,13 +163,11 @@ func (m *MockStub) PutState(key string, value []byte) error {
 			inserted = true
 			break
 		} else if comp == 0 {
-			// Key already exists
 			inserted = true
 			break
 		}
 	}
 
-	// If not inserted and list is not empty, add to end
 	if !inserted {
 		if m.Keys.Len() == 0 {
 			m.Keys.PushFront(key)
@@ -238,6 +178,63 @@ func (m *MockStub) PutState(key string, value []byte) error {
 
 	return nil
 }
+
+// func (m *MockStub) PutState(key string, value []byte) error {
+// 	m.Invocations = append(m.Invocations, fmt.Sprintf("PutState:%s", key))
+//
+// 	// If value is empty, delete the key
+// 	if len(value) == 0 {
+// 		delete(m.State, key)
+// 		return nil
+// 	}
+//
+// 	m.State[key] = value
+//
+// 	// Generic composite key indexing for any registered asset type
+// 	var assetData map[string]any
+// 	if err := json.Unmarshal(value, &assetData); err == nil {
+// 		assetType, _ := assetData["@assetType"].(string)
+//
+// 		// Check if this asset type has registered composite key properties
+// 		if indexedProps, exists := CompositeKeyRegistry[assetType]; exists {
+// 			// For each indexed property, create a composite key
+// 			for _, propName := range indexedProps {
+// 				if propValue, ok := assetData[propName].(string); ok && propValue != "" {
+// 					// Create composite key: assetType\x00propertyValue
+// 					compositeKey := assetType + string('\x00') + propValue
+// 					m.State[compositeKey] = value
+// 				}
+// 			}
+// 		}
+// 	}
+//
+// 	// Maintain ordered key list
+// 	inserted := false
+// 	for elem := m.Keys.Front(); elem != nil; elem = elem.Next() {
+// 		elemValue := elem.Value.(string)
+// 		comp := strings.Compare(key, elemValue)
+// 		if comp < 0 {
+// 			m.Keys.InsertBefore(key, elem)
+// 			inserted = true
+// 			break
+// 		} else if comp == 0 {
+// 			// Key already exists
+// 			inserted = true
+// 			break
+// 		}
+// 	}
+//
+// 	// If not inserted and list is not empty, add to end
+// 	if !inserted {
+// 		if m.Keys.Len() == 0 {
+// 			m.Keys.PushFront(key)
+// 		} else {
+// 			m.Keys.PushBack(key)
+// 		}
+// 	}
+//
+// 	return nil
+// }
 
 // DelState removes a key from mock state
 func (m *MockStub) DelState(key string) error {
@@ -258,10 +255,14 @@ func (m *MockStub) GetStateByPartialCompositeKey(objectType string, keys []strin
 		partialCompositeKey += string('\x00') + key
 	}
 
-	// fmt.Printf("DEBUG GetStateByPartialCompositeKey: objectType=%q, keys=%v, prefix=%q\n", objectType, keys, partialCompositeKey)
-	// fmt.Printf("DEBUG Available keys in state:\n")
+	fmt.Printf("DEBUG GetStateByPartialCompositeKey called:\n")
+	fmt.Printf("DEBUG   objectType: %q\n", objectType)
+	fmt.Printf("DEBUG   keys: %v\n", keys)
+	fmt.Printf("DEBUG   partialCompositeKey: %q\n", partialCompositeKey)
+
+	fmt.Printf("DEBUG Available keys in state:\n")
 	for k := range m.State {
-		fmt.Printf("  %q\n", k)
+		fmt.Printf("DEBUG   %q\n", k)
 	}
 
 	// Use range query from partial key to partial key + max unicode
