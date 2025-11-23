@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/hyperledger/fabric-private-chaincode/samples/chaincode/confidential-escrow/chaincode/testutils"
@@ -155,6 +156,13 @@ func TestMintTokens_Success(t *testing.T) {
 		t.Fatalf("Failed to create mock user directory: %v", err)
 	}
 
+	// DEBUG: Dump all state keys
+	fmt.Printf("\nDEBUG Current MockStub State:\n")
+	for k := range mockStub.State {
+		fmt.Printf("DEBUG   Key: %q\n", k)
+	}
+	fmt.Printf("\n")
+
 	// Execute MintTokens
 	args := map[string]any{
 		"assetId":        fixtures.AssetID,
@@ -187,68 +195,68 @@ func TestMintTokens_Success(t *testing.T) {
 	t.Log("✓ Tokens minted successfully")
 }
 
-// func TestMintTokens_NewAssetInWallet(t *testing.T) {
-// 	wrapper, mockStub := testutils.NewMockStubWrapper()
-// 	fixtures := testutils.NewTestFixtures()
-//
-// 	// Setup: Create digital asset
-// 	err := fixtures.CreateMockDigitalAsset(
-// 		mockStub,
-// 		fixtures.AssetID,
-// 		fixtures.AssetSymbol,
-// 		fixtures.AssetName,
-// 		fixtures.IssuerCertHash,
-// 		1000.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create mock digital asset: %v", err)
-// 	}
-//
-// 	// Setup: Create wallet WITHOUT this asset
-// 	err = fixtures.CreateMockWallet(
-// 		mockStub,
-// 		fixtures.BuyerPubKey,
-// 		fixtures.BuyerCertHash,
-// 		fixtures.BuyerWalletID,
-// 		fixtures.BuyerWalletUUID,
-// 		"other-asset-id", // Different asset
-// 		100.0,
-// 		0.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create mock wallet: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockUserDir(
-// 		mockStub,
-// 		fixtures.BuyerPubKeyHash,
-// 		fixtures.BuyerWalletUUID,
-// 		fixtures.BuyerCertHash,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create mock user directory: %v", err)
-// 	}
-//
-// 	// Execute MintTokens for new asset
-// 	args := map[string]any{
-// 		"assetId":        fixtures.AssetID,
-// 		"pubKey":         fixtures.BuyerPubKey,
-// 		"amount":         25.0,
-// 		"issuerCertHash": fixtures.IssuerCertHash,
-// 	}
-//
-// 	_, txErr := MintTokens.Routine(wrapper.StubWrapper, args)
-// 	testutils.AssertNoError(t, txErr, "MintTokens should succeed for new asset")
-//
-// 	// Verify wallet now has 2 assets
-// 	walletBytes := mockStub.State["wallet:"+fixtures.BuyerWalletUUID]
-// 	var wallet map[string]any
-// 	json.Unmarshal(walletBytes, &wallet)
-// 	digitalAssetTypes := wallet["digitalAssetTypes"].([]any)
-// 	testutils.AssertEqual(t, 2, len(digitalAssetTypes), "wallet should have 2 assets")
-//
-// 	t.Log("✓ Tokens minted for new asset in wallet")
-// }
+func TestMintTokens_NewAssetInWallet(t *testing.T) {
+	wrapper, mockStub := testutils.NewMockStubWrapper()
+	fixtures := testutils.NewTestFixtures()
+
+	// Setup: Create digital asset
+	err := fixtures.CreateMockDigitalAsset(
+		mockStub,
+		fixtures.AssetID,
+		fixtures.AssetSymbol,
+		fixtures.AssetName,
+		fixtures.IssuerCertHash,
+		1000.0,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create mock digital asset: %v", err)
+	}
+
+	// Setup: Create wallet WITHOUT this asset
+	err = fixtures.CreateMockWallet(
+		mockStub,
+		fixtures.BuyerPubKey,
+		fixtures.BuyerCertHash,
+		fixtures.BuyerWalletID,
+		fixtures.BuyerWalletUUID,
+		"other-asset-id", // Different asset
+		100.0,
+		0.0,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create mock wallet: %v", err)
+	}
+
+	err = fixtures.CreateMockUserDir(
+		mockStub,
+		fixtures.BuyerPubKeyHash,
+		fixtures.BuyerWalletUUID,
+		fixtures.BuyerCertHash,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create mock user directory: %v", err)
+	}
+
+	// Execute MintTokens for new asset
+	args := map[string]any{
+		"assetId":        fixtures.AssetID,
+		"pubKey":         fixtures.BuyerPubKey,
+		"amount":         25.0,
+		"issuerCertHash": fixtures.IssuerCertHash,
+	}
+
+	_, txErr := MintTokens.Routine(wrapper.StubWrapper, args)
+	testutils.AssertNoError(t, txErr, "MintTokens should succeed for new asset")
+
+	// Verify wallet now has 2 assets
+	walletBytes := mockStub.State["wallet:"+fixtures.BuyerWalletUUID]
+	var wallet map[string]any
+	json.Unmarshal(walletBytes, &wallet)
+	digitalAssetTypes := wallet["digitalAssetTypes"].([]any)
+	testutils.AssertEqual(t, 2, len(digitalAssetTypes), "wallet should have 2 assets")
+
+	t.Log("✓ Tokens minted for new asset in wallet")
+}
 
 func TestMintTokens_UnauthorizedIssuer(t *testing.T) {
 	wrapper, mockStub := testutils.NewMockStubWrapper()
@@ -336,193 +344,6 @@ func TestMintTokens_WalletNotFound(t *testing.T) {
 // ============================================================================
 // TransferTokens Tests
 // ============================================================================
-
-// func TestTransferTokens_Success(t *testing.T) {
-// 	wrapper, mockStub := testutils.NewMockStubWrapper()
-// 	fixtures := testutils.NewTestFixtures()
-//
-// 	// Setup: Create digital asset
-// 	err := fixtures.CreateMockDigitalAsset(
-// 		mockStub,
-// 		fixtures.AssetID,
-// 		fixtures.AssetSymbol,
-// 		fixtures.AssetName,
-// 		fixtures.IssuerCertHash,
-// 		1000.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create mock digital asset: %v", err)
-// 	}
-//
-// 	// Setup: Create buyer wallet with balance
-// 	err = fixtures.CreateMockWallet(
-// 		mockStub,
-// 		fixtures.BuyerPubKey,
-// 		fixtures.BuyerCertHash,
-// 		fixtures.BuyerWalletID,
-// 		fixtures.BuyerWalletUUID,
-// 		fixtures.AssetID,
-// 		200.0,
-// 		0.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create buyer wallet: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockUserDir(
-// 		mockStub,
-// 		fixtures.BuyerPubKeyHash,
-// 		fixtures.BuyerWalletUUID,
-// 		fixtures.BuyerCertHash,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create buyer user directory: %v", err)
-// 	}
-//
-// 	// Setup: Create seller wallet
-// 	err = fixtures.CreateMockWallet(
-// 		mockStub,
-// 		fixtures.SellerPubKey,
-// 		fixtures.SellerCertHash,
-// 		fixtures.SellerWalletID,
-// 		fixtures.SellerWalletUUID,
-// 		fixtures.AssetID,
-// 		50.0,
-// 		0.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create seller wallet: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockUserDir(
-// 		mockStub,
-// 		fixtures.SellerPubKeyHash,
-// 		fixtures.SellerWalletUUID,
-// 		fixtures.SellerCertHash,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create seller user directory: %v", err)
-// 	}
-//
-// 	// Execute TransferTokens
-// 	args := map[string]any{
-// 		"fromPubKey":     fixtures.BuyerPubKey,
-// 		"toPubKey":       fixtures.SellerPubKey,
-// 		"assetId":        fixtures.AssetID,
-// 		"amount":         75.0,
-// 		"senderCertHash": fixtures.BuyerCertHash,
-// 	}
-//
-// 	response, txErr := TransferTokens.Routine(wrapper.StubWrapper, args)
-// 	testutils.AssertNoError(t, txErr, "TransferTokens should succeed")
-//
-// 	// Verify response
-// 	var result map[string]any
-// 	if err := json.Unmarshal(response, &result); err != nil {
-// 		t.Fatalf("Failed to parse response: %v", err)
-// 	}
-//
-// 	testutils.AssertEqual(t, "Transfer completed successfully", result["message"], "message mismatch")
-// 	testutils.AssertEqual(t, 75.0, result["amount"], "amount mismatch")
-//
-// 	// Verify buyer balance decreased
-// 	buyerWalletBytes := mockStub.State["wallet:"+fixtures.BuyerWalletUUID]
-// 	var buyerWallet map[string]any
-// 	json.Unmarshal(buyerWalletBytes, &buyerWallet)
-// 	t.Logf("Buyer wallet ownerCertHash: %q", buyerWallet["ownerCertHash"])
-// 	t.Logf("Sender cert hash: %q", fixtures.BuyerCertHash)
-// 	buyerBalances := buyerWallet["balances"].([]any)
-// 	testutils.AssertEqual(t, 125.0, buyerBalances[0].(float64), "buyer balance should be 200 - 75")
-//
-// 	// Verify seller balance increased
-// 	sellerWalletBytes := mockStub.State["wallet:"+fixtures.SellerWalletUUID]
-// 	var sellerWallet map[string]any
-// 	json.Unmarshal(sellerWalletBytes, &sellerWallet)
-// 	sellerBalances := sellerWallet["balances"].([]any)
-// 	testutils.AssertEqual(t, 125.0, sellerBalances[0].(float64), "seller balance should be 50 + 75")
-//
-// 	t.Log("✓ Tokens transferred successfully")
-// }
-
-// func TestTransferTokens_InsufficientBalance(t *testing.T) {
-// 	wrapper, mockStub := testutils.NewMockStubWrapper()
-// 	fixtures := testutils.NewTestFixtures()
-//
-// 	// Setup
-// 	err := fixtures.CreateMockDigitalAsset(
-// 		mockStub,
-// 		fixtures.AssetID,
-// 		fixtures.AssetSymbol,
-// 		fixtures.AssetName,
-// 		fixtures.IssuerCertHash,
-// 		1000.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create mock digital asset: %v", err)
-// 	}
-//
-// 	// Buyer wallet with only 50 tokens
-// 	err = fixtures.CreateMockWallet(
-// 		mockStub,
-// 		fixtures.BuyerPubKey,
-// 		fixtures.BuyerCertHash,
-// 		fixtures.BuyerWalletID,
-// 		fixtures.BuyerWalletUUID,
-// 		fixtures.AssetID,
-// 		50.0,
-// 		0.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create buyer wallet: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockUserDir(
-// 		mockStub,
-// 		fixtures.BuyerPubKeyHash,
-// 		fixtures.BuyerWalletUUID,
-// 		fixtures.BuyerCertHash,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create buyer user directory: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockWallet(
-// 		mockStub,
-// 		fixtures.SellerPubKey,
-// 		fixtures.SellerCertHash,
-// 		fixtures.SellerWalletID,
-// 		fixtures.SellerWalletUUID,
-// 		fixtures.AssetID,
-// 		100.0,
-// 		0.0,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create seller wallet: %v", err)
-// 	}
-//
-// 	err = fixtures.CreateMockUserDir(
-// 		mockStub,
-// 		fixtures.SellerPubKeyHash,
-// 		fixtures.SellerWalletUUID,
-// 		fixtures.SellerCertHash,
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create seller user directory: %v", err)
-// 	}
-//
-// 	// Try to transfer more than available
-// 	args := map[string]any{
-// 		"fromPubKey":     fixtures.BuyerPubKey,
-// 		"toPubKey":       fixtures.SellerPubKey,
-// 		"assetId":        fixtures.AssetID,
-// 		"amount":         100.0, // More than buyer has
-// 		"senderCertHash": fixtures.BuyerCertHash,
-// 	}
-//
-// 	_, txErr := TransferTokens.Routine(wrapper.StubWrapper, args)
-// 	testutils.AssertError(t, txErr, "should fail with insufficient balance")
-// 	testutils.AssertErrorStatus(t, txErr, 400, "should return 400 status")
-// }
 
 func TestTransferTokens_UnauthorizedSender(t *testing.T) {
 	wrapper, mockStub := testutils.NewMockStubWrapper()
