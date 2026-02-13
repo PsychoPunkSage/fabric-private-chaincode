@@ -108,7 +108,7 @@ cd samples/chaincode/confidential-escrow
 # Setup Bob using Option 4.
 ```
 
-#### 4. In 3rd terminal window - Docker Environment (`Monitor`)
+#### 4. In 4th terminal window - Docker Environment (`Monitor`)
 
 ```bash
 # Enter docker container
@@ -118,7 +118,7 @@ cd samples/chaincode/confidential-escrow
 # Interactive menu
 ./multi_user_dashboard.sh
 
-# Setup Bob using Option 5.
+# Setup Monitor using Option 5.
 ```
 
 #### 5. Run Tests
@@ -127,7 +127,53 @@ cd samples/chaincode/confidential-escrow
 # Run all basic tests
 ./multi_user_dashboard.sh
 
-# Chosing Option 7.
+# Chosing Option 7. (One can run it from any terminal)
+```
+
+## Escrow Workflow
+
+### Step 1: Create Wallets
+
+Before any escrow operations, both parties must have wallets:
+
+1. **Alice** creates her wallet via Terminal 2 (Option 3 - currently created automatically)
+2. **Bob** creates his wallet via Terminal 3 (Option 4 - currently created automatically)
+3. **Monitor** (Terminal 4, Option 5) can observe all wallet creations and transactions in real-time
+
+### Step 2: Create Escrow
+
+Once both wallets exist, either party can create an escrow using `createAndLockEscrow`. The buyer locks funds by specifying:
+
+- Buyer/seller public keys
+- Amount and asset type
+- `parcelId` and `secret` (used for condition verification)
+
+### Step 3: Complete Escrow
+
+Two possible outcomes:
+
+| Operation   | Who Calls | When                                        | Result                   |
+| ----------- | --------- | ------------------------------------------- | ------------------------ |
+| **Release** | Seller    | Condition fulfilled (e.g., goods delivered) | Funds transfer to seller |
+| **Refund**  | Buyer     | Condition not met or cancelled              | Funds return to buyer    |
+
+### Release vs Refund
+
+- **Release** (`releaseEscrow`): Seller provides correct `secret + parcelId` to prove fulfillment. Funds move from buyer's escrow balance to seller's available balance. Status → `Released`.
+
+- **Refund** (`refundEscrow`): Buyer cancels an active escrow. No secret needed. Funds return to buyer's available balance. Status → `Refunded`.
+
+Both operations only work on `Active` escrows.
+
+## Troubleshooting
+
+**Network already running?**
+If your Fabric test-network is already up, comment out the `network.sh down` and `network.sh up` lines in `test.sh` to avoid restarting it:
+
+```bash
+# In test.sh, comment these lines:
+# run_cmd "./network.sh down" "Bringing down network"
+# run_cmd "./network.sh up createChannel -ca" "Starting network"
 ```
 
 ## Contributing
